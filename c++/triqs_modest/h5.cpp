@@ -118,6 +118,7 @@ namespace triqs::modest {
     h5_read(subgroup, "n_bands_per_k", bv.n_bands_per_k);
     h5_read(subgroup, "band_window", bv.band_window);
     h5_read(subgroup, "band_window_optics", bv.band_window_optics);
+    h5_read(subgroup, "joint_window", bv.joint_window);
     // rot_symmetries stored as a stacked (n_sym, 3, 3) array
     nda::array<double, 3> R;
     h5_read(subgroup, "rot_symmetries", R);
@@ -131,6 +132,7 @@ namespace triqs::modest {
     h5_write(subgroup, "n_bands_per_k", bv.n_bands_per_k);
     h5_write(subgroup, "band_window", bv.band_window);
     h5_write(subgroup, "band_window_optics", bv.band_window_optics);
+    h5_write(subgroup, "joint_window", bv.joint_window);
     // stack rot_symmetries into a (n_sym, 3, 3) array for a simple, contiguous layout
     long n_sym = bv.rot_symmetries.size();
     auto R     = nda::array<double, 3>(n_sym, 3, 3);
@@ -171,28 +173,28 @@ namespace triqs::modest {
   // spectral function containers
   void h5_read(h5::group g, std::string const &name, spectral_function_w &Aw) {
     auto subgroup = g.open_group(name);
-    assert_hdf5_format(g, Aw);
+    assert_hdf5_format(subgroup, Aw);
     h5_read(subgroup, "total", Aw.total);
     h5_read(subgroup, "projected", Aw.projected);
   }
 
   void h5_write(h5::group g, std::string const &name, spectral_function_w const &Aw) {
     auto subgroup = g.create_group(name);
-    write_hdf5_format(g, Aw);
+    write_hdf5_format(subgroup, Aw);
     h5_write(subgroup, "total", Aw.total);
     h5_write(subgroup, "projected", Aw.projected);
   }
 
   void h5_read(h5::group g, std::string const &name, spectral_function_kw &Akw) {
     auto subgroup = g.open_group(name);
-    assert_hdf5_format(g, Akw);
+    assert_hdf5_format(subgroup, Akw);
     h5_read(subgroup, "total", Akw.total);
     h5_read(subgroup, "projected", Akw.projected);
   }
 
   void h5_write(h5::group g, std::string const &name, spectral_function_kw const &Akw) {
     auto subgroup = g.create_group(name);
-    write_hdf5_format(g, Akw);
+    write_hdf5_format(subgroup, Akw);
     h5_write(subgroup, "total", Akw.total);
     h5_write(subgroup, "projected", Akw.projected);
   }
