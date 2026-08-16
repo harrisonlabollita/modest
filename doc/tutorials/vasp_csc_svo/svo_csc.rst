@@ -3,6 +3,10 @@
 Charge self-consistent DFT+DMFT with VASP: SrVO\ :sub:`3`
 =========================================================
 
+.. contents:: Contents
+   :local:
+   :depth: 2
+
 This tutorial walks through a full charge self-consistent (CSC) DFT+DMFT
 calculation for the prototypical correlated metal SrVO\ :sub:`3`, using the
 :program:`VASP` driver shipped with `dftkit <https://github.com/triqs/dftkit>`_
@@ -25,22 +29,51 @@ Hamiltonian, projectors and charge-density correction through the
 construction internally. No source-code patching and no auxiliary shell script
 are needed.
 
+Learning outcomes
+-----------------
+
+By the end of this tutorial you will know how to:
+
+* drive a charge self-consistent (CSC) DFT+DMFT calculation with
+  :py:class:`~triqs_modest.dft_driver.DftDriver` wrapping a DFT-code-specific
+  driver object — here the ``dftkit`` :program:`VASP` driver — from a single
+  Python script;
+* configure the DFT side of a CSC run: the projector window and correlated
+  shell in ``plo.cfg``, and the ``INCAR`` settings (``ICHARG``, ``LSYNCH5``,
+  mixing) that let :program:`VASP` wait for and apply an external
+  charge-density correction each electronic step;
+* structure a CSC calculation as **nested loops** — an outer DFT
+  charge-update loop and an inner DMFT self-consistency loop — and feed the
+  DMFT result back to the DFT code with
+  :py:func:`~triqs_modest.local_gf.charge_density_correction` and
+  ``update_one_body_elements_with_charge_correction``;
+* track charge self-consistency convergence across outer iterations using
+  the impurity self-energy stored in a checkpoint archive, rather than the
+  inner-loop :math:`G_{\mathrm{imp}} = G_{\mathrm{loc}}` criterion.
+
 .. note::
 
    This example requires :program:`VASP` 6.5.0 or newer, built with HDF5
    support enabled, plus the TRIQS applications ``triqs_modest``,
    ``triqs_dftkit`` and ``triqs_ctseg``.
 
+Files
+-----
+
 All input files are collected in the tutorial directory:
-:download:`POSCAR <./POSCAR>`, :download:`INCAR.scf <./INCAR.scf>`,
-:download:`INCAR <./INCAR>`, :download:`plo.cfg <./plo.cfg>`,
-:download:`vasp_modest_csc.py <./vasp_modest_csc.py>` and
-:download:`plot_sigma.py <./plot_sigma.py>`. You have to provide your own
-:file:`POTCAR` (``Sr_sv``, ``V_sv`` and ``O``).
+
+* VASP input: :download:`POSCAR <./POSCAR>`,
+  :download:`INCAR.scf <./INCAR.scf>`, :download:`INCAR <./INCAR>`
+* projector definition: :download:`plo.cfg <./plo.cfg>`
+* scripts: :download:`vasp_modest_csc.py <./vasp_modest_csc.py>`,
+  :download:`plot_sigma.py <./plot_sigma.py>`
+* reference output: :download:`checkpoint_ref.h5 <./checkpoint_ref.h5>`
+
+You have to provide your own :file:`POTCAR` (``Sr_sv``, ``V_sv`` and ``O``).
 
 
-Step 1 — converge the DFT charge density
------------------------------------------
+Step 1 — Converge the DFT charge density
+----------------------------------------
 
 We start from the simple cubic SrVO\ :sub:`3` cell:
 
@@ -62,8 +95,8 @@ Run :program:`VASP` in a dedicated directory and keep the resulting
 starting point.
 
 
-Step 2 — the projector definition
-----------------------------------
+Step 2 — Define the projectors
+------------------------------
 
 The correlated subspace is configured for PLOVasp through :file:`plo.cfg`:
 
@@ -78,7 +111,7 @@ runs PLOVasp with this file on every charge iteration; you do not call the
 converter yourself.
 
 
-Step 3 — switch the INCAR to charge self-consistency
+Step 3 — Switch the INCAR to charge self-consistency
 ----------------------------------------------------
 
 For the CSC run we read the converged density and let :program:`VASP` wait for
@@ -99,8 +132,8 @@ Copy the converged :file:`CHGCAR` and :file:`WAVECAR` from Step 1, this
 a fresh working directory.
 
 
-Step 4 — the DMFT driver script
---------------------------------
+Step 4 — Write the DMFT driver script
+-------------------------------------
 
 The complete CSC loop is implemented in :download:`vasp_modest_csc.py
 <./vasp_modest_csc.py>`:
@@ -149,7 +182,7 @@ A few points worth highlighting:
   the last outer iteration.
 
 
-Step 5 — run it
+Step 5 — Run it
 ---------------
 
 Load the environment and launch the script under MPI. The Python/solver part
@@ -162,8 +195,8 @@ For meaningful CT-SEG statistics use at least a few tens of cores. The whole
 ten-iteration run takes a few minutes on a single modern node.
 
 
-Step 6 — track the impurity self-energy
----------------------------------------
+The result
+----------
 
 To monitor convergence we follow the impurity self-energy across the charge
 iterations. The script :download:`plot_sigma.py <./plot_sigma.py>` reads
@@ -209,3 +242,18 @@ self-consistency is converged.
    CT-SEG noise and carries no trend. The self-energy, by contrast, feels the
    shift of the impurity levels as the charge density is updated and converges
    smoothly, which is why we follow it here.
+
+Takeaways
+---------
+
+* A CSC calculation is two nested loops: an outer DFT charge update wrapping an
+  inner DMFT self-consistency cycle. ``DftDriver`` hides the DFT code behind a
+  two-method interface, so the loop itself stays code-agnostic.
+* The DFT side must be configured to *wait* for the DMFT correction
+  (``ICHARG = 5``, large ``NELM``) and to exchange it through HDF5
+  (``LSYNCH5 = True``) — no VASP source patching required from 6.5.0 onwards.
+* Converge a plain DFT charge density first; the CSC run starts from that
+  :file:`CHGCAR`.
+* Judge outer-loop convergence on the impurity self-energy, not on
+  :math:`|G_\mathrm{imp} - G_\mathrm{loc}|`, which measures the inner loop and
+  is dominated by solver noise.

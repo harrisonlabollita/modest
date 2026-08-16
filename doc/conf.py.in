@@ -86,7 +86,10 @@ html_theme_options = {
     # Toc options
     'collapse_navigation': False,
     'sticky_navigation': True,
-    'navigation_depth': 5,
+    # Keep the sidebar to page titles only. With a deeper value the theme
+    # renders every section of every page (collapse_navigation is False), which
+    # makes the tree long enough that sibling entries scroll out of view.
+    'navigation_depth': 2,
     'includehidden': True,
     'titles_only': False
 }
