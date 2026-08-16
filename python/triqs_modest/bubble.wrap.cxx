@@ -94,8 +94,8 @@ PyMethodDef c2py::tp_methods<_c2py_cls_0>[] = {
 };
 
 constexpr auto _c2py_doc_member_0 = R"DOC(Total :math:`\Gamma_{\alpha\beta}(\omega,\Omega)`: (n_dir, n_Om, n_omega).)DOC";
-constexpr auto _c2py_doc_member_1 = R"DOC(Intraband (band-diagonal) contribution: (n_dir, n_Om, n_omega).)DOC";
-constexpr auto _c2py_doc_member_2 = R"DOC(Interband contribution = total − intra: (n_dir, n_Om, n_omega).)DOC";
+constexpr auto _c2py_doc_member_1 = R"DOC(Diagonal-velocity contribution: (n_dir, n_Om, n_omega). Does not sum with Gamma_inter to Gamma.)DOC";
+constexpr auto _c2py_doc_member_2 = R"DOC(Off-diagonal-velocity contribution: (n_dir, n_Om, n_omega).)DOC";
 constexpr auto _c2py_doc_member_3 = R"DOC(Internal frequency grid :math:`\omega` (from Sigma_w's mesh): (n_omega,).)DOC";
 constexpr auto _c2py_doc_member_4 = R"DOC(External frequency grid :math:`\Omega`: (n_Om,).)DOC";
 constexpr auto _c2py_doc_member_5 = R"DOC(Direction labels (e.g. "xx", "xy"), aligned with the leading axis.)DOC";
@@ -136,8 +136,26 @@ const std::string c2py::tp_doc<_c2py_cls_0> = R"DOC(Kubo transport distribution 
    \mathrm{Tr}\left[ v_{\mathbf{k},\alpha} A_{\mathbf{k}}(\omega+\Omega)
    v_{\mathbf{k},\beta}  A_{\mathbf{k}}(\omega) \right],
 
-with the band-basis spectral function :math:`A = -(G-G^\dagger)/(2\pi i)`. The result is decomposed into
-total / intraband / interband contributions (band-diagonal vs off-diagonal in the dispersion basis).)DOC"
+with the band-basis spectral function :math:`A = -(G-G^\dagger)/(2\pi i)`.
+
+The result is decomposed by splitting the **velocity matrix elements** into their band-diagonal and
+band-off-diagonal parts, :math:`v = v^d + v^o` with :math:`v^d = \mathrm{diag}(v)`:
+
+.. math::
+
+   \Gamma^{\mathrm{intra}} = \mathrm{Tr}\left[ v^d_\alpha A(\omega+\Omega) v^d_\beta A(\omega) \right],
+   \qquad
+   \Gamma^{\mathrm{inter}} = \mathrm{Tr}\left[ v^o_\alpha A(\omega+\Omega) v^o_\beta A(\omega) \right].
+
+This matches `triqs_dft_tools`' `oc_select = 'intra' / 'inter' / 'both'`, computed here in a single
+pass instead of three separate runs.
+
+.. warning::
+
+   The mixed :math:`d\!-\!o` traces are not reported (as in `triqs_dft_tools`), so
+   :math:`\Gamma \neq \Gamma^{\mathrm{intra}} + \Gamma^{\mathrm{inter}}` whenever :math:`A` has
+   band-off-diagonal weight, i.e. for any non-zero off-diagonal self-energy. The two coincide at
+   :math:`\Sigma = 0`, where the mixed traces vanish identically.)DOC"
    + std::string{"\n\n----------\n\n"} + c2py::tp_ctor_doc<_c2py_cls_0>;
 // --------- class _c2py_cls_1 -----------
 using _c2py_cls_1                                            = triqs::modest::transport_function_t;
@@ -220,7 +238,12 @@ const std::string c2py::tp_doc<_c2py_cls_1> = R"DOC(Transport function :math:`\P
 v^{nn}_{\alpha} v^{nn}_{\beta}\, \delta(\omega - \varepsilon_n(\mathbf{k})) / V`.
 
 The intraband (Drude) building block, evaluated with a Lorentzian-broadened delta and no
-self-energy (bare DFT bands). Assumes a diagonal (band-basis) dispersion.)DOC"
+self-energy (bare DFT bands). Assumes a diagonal (band-basis) dispersion.
+
+.. note::
+
+   This uses the product of diagonal velocities :math:`(v_\alpha)_{nn} (v_\beta)_{nn}`, consistent
+   with `Gamma_intra` above.)DOC"
    + std::string{"\n\n----------\n\n"} + c2py::tp_ctor_doc<_c2py_cls_1>;
 
 // ==================== module functions ====================

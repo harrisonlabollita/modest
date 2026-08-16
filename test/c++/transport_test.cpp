@@ -55,8 +55,14 @@ TEST(transport_tests, transport_distribution_svo) { // NOLINT
   ASSERT_EQ(td.Gamma.extent(2), 401); // n_ω
 
   auto win = nda::range(10, 401 - 10); // inner window covered by the reference
-  for (long iq = 0; iq < td.Gamma.extent(1); ++iq)
-    EXPECT_ARRAY_NEAR(nda::array<double, 1>{td.Gamma(0, iq, win)}, Gamma_ref(iq, r_all), 1e-10);
+  for (long iq = 0; iq < td.Gamma.extent(1); ++iq) EXPECT_ARRAY_NEAR(nda::array<double, 1>{td.Gamma(0, iq, win)}, Gamma_ref(iq, r_all), 1e-10);
+
+  // The intra/inter split masks the velocities (v = v^d + v^o). At Σ = 0 the band-basis G — and hence A —
+  // is diagonal, so the mixed d–o traces vanish identically: (v^d A) is diagonal and (v^o A) has zero
+  // diagonal, so Tr[(v^d A)(v^o A)] = 0. The three pieces therefore add up *in this limit*.
+  EXPECT_ARRAY_NEAR(nda::array<double, 3>{td.Gamma_intra + td.Gamma_inter}, td.Gamma, 1e-12);
+  EXPECT_GT(nda::sum(nda::abs(td.Gamma_intra)), 1e-6); // guard: neither piece is trivially zero
+  EXPECT_GT(nda::sum(nda::abs(td.Gamma_inter)), 1e-6);
 }
 
 // The Σ = 0 checks above leave the Woodbury *correction* term untouched: with Σ = 0 the band-basis G is
@@ -84,9 +90,9 @@ TEST(transport_tests, woodbury_nonzero_sigma) { // NOLINT
   }
   auto Sigma_w = E.embed(Sigma_imp);
 
-  double const mu         = 0.3;
-  double const broadening = 0.02;
-  auto Om_mesh            = nda::array<double, 1>{0.0};
+  double const mu                     = 0.3;
+  double const broadening             = 0.02;
+  auto Om_mesh                        = nda::array<double, 1>{0.0};
   std::vector<std::string> directions = {"xx", "xy"};
 
   auto td = transport_distribution(obe, mu, Sigma_w, Om_mesh, directions, broadening);
@@ -116,9 +122,9 @@ TEST(transport_tests, woodbury_nonzero_sigma) { // NOLINT
       long v_off = vel.joint_window(sp, k, 1);
       long n_ov  = vel.joint_window(sp, k, 2);
       if (n_ov <= 0) continue;
-      long N_nu = obe.H.N_nu(s, k);
+      long N_nu                = obe.H.N_nu(s, k);
       nda::matrix<dcomplex> Hk = obe.H.H(s, k);
-      auto PSP = triqs::modest::detail::upfold_self_energy_all_freq(obe, obe.P, Sigma_w, k, s); // (n_w, N_nu, N_nu)
+      auto PSP                 = triqs::modest::detail::upfold_self_energy_all_freq(obe, obe.P, Sigma_w, k, s); // (n_w, N_nu, N_nu)
 
       auto A_sl = nda::range(a_off, a_off + n_ov);
       auto v_sl = nda::range(v_off, v_off + n_ov);

@@ -23,13 +23,27 @@ namespace triqs::modest {
    *     \mathrm{Tr}\left[ v_{\mathbf{k},\alpha} A_{\mathbf{k}}(\omega+\Omega)
    *                        v_{\mathbf{k},\beta}  A_{\mathbf{k}}(\omega) \right],
    * \f]
-   * with the band-basis spectral function \f$ A = -(G-G^\dagger)/(2\pi i) \f$. The result is decomposed into
-   * total / intraband / interband contributions (band-diagonal vs off-diagonal in the dispersion basis).
+   * with the band-basis spectral function \f$ A = -(G-G^\dagger)/(2\pi i) \f$.
+   *
+   * The result is decomposed by splitting the **velocity matrix elements** into their band-diagonal and
+   * band-off-diagonal parts, \f$ v = v^d + v^o \f$ with \f$ v^d = \mathrm{diag}(v) \f$:
+   * \f[
+   *   \Gamma^{\mathrm{intra}} = \mathrm{Tr}\left[ v^d_\alpha A(\omega+\Omega) v^d_\beta A(\omega) \right],
+   *   \qquad
+   *   \Gamma^{\mathrm{inter}} = \mathrm{Tr}\left[ v^o_\alpha A(\omega+\Omega) v^o_\beta A(\omega) \right].
+   * \f]
+   * This matches `triqs_dft_tools`' `oc_select = 'intra' / 'inter' / 'both'`, computed here in a single
+   * pass instead of three separate runs.
+   *
+   * @warning The mixed \f$ d\!-\!o \f$ traces are not reported (as in `triqs_dft_tools`), so
+   * \f$ \Gamma \neq \Gamma^{\mathrm{intra}} + \Gamma^{\mathrm{inter}} \f$ whenever \f$ A \f$ has
+   * band-off-diagonal weight, i.e. for any non-zero off-diagonal self-energy. The two coincide at
+   * \f$ \Sigma = 0 \f$, where the mixed traces vanish identically.
    */
   struct transport_distribution_t {
     nda::array<double, 3> Gamma;         ///< Total \f$ \Gamma_{\alpha\beta}(\omega,\Omega) \f$: (n_dir, n_Om, n_omega).
-    nda::array<double, 3> Gamma_intra;   ///< Intraband (band-diagonal) contribution: (n_dir, n_Om, n_omega).
-    nda::array<double, 3> Gamma_inter;   ///< Interband contribution = total − intra: (n_dir, n_Om, n_omega).
+    nda::array<double, 3> Gamma_intra;   ///< Diagonal-velocity contribution: (n_dir, n_Om, n_omega). Does not sum with Gamma_inter to Gamma.
+    nda::array<double, 3> Gamma_inter;   ///< Off-diagonal-velocity contribution: (n_dir, n_Om, n_omega).
     nda::array<double, 1> omega_mesh;    ///< Internal frequency grid \f$ \omega \f$ (from Sigma_w's mesh): (n_omega,).
     nda::array<double, 1> Om_mesh;       ///< External frequency grid \f$ \Omega \f$: (n_Om,).
     std::vector<std::string> directions; ///< Direction labels (e.g. "xx", "xy"), aligned with the leading axis.
@@ -46,6 +60,9 @@ namespace triqs::modest {
    *
    * @details The intraband (Drude) building block, evaluated with a Lorentzian-broadened delta and no
    * self-energy (bare DFT bands). Assumes a diagonal (band-basis) dispersion.
+   *
+   * @note This uses the product of diagonal velocities \f$ (v_\alpha)_{nn} (v_\beta)_{nn} \f$, consistent
+   * with `Gamma_intra` above. 
    */
   struct transport_function_t {
     nda::array<double, 2> Phi;           ///< \f$ \Phi_{\alpha\beta}(\omega) \f$: (n_dir, n_omega).

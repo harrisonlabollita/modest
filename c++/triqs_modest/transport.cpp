@@ -92,8 +92,8 @@ namespace triqs::modest {
       throw std::runtime_error{fmt::format("transport_distribution: expected 3 Cartesian velocity directions, got {}", vel.n_directions())};
     double V       = *obe.cell_volume;
     auto spin_kind = obe.C_space.spin_kind();
-    long n_spin     = (spin_kind == spin_kind_e::Polarized) ? 2 : 1;
-    long spin_pol   = (spin_kind == spin_kind_e::NonPolarized) ? 0 : 1;
+    long n_spin    = (spin_kind == spin_kind_e::Polarized) ? 2 : 1;
+    long spin_pol  = (spin_kind == spin_kind_e::NonPolarized) ? 0 : 1;
 
     auto const &mesh = Sigma_w(0, 0).mesh();
     long n_w         = mesh.size();
@@ -128,13 +128,14 @@ namespace triqs::modest {
 
     auto Gamma       = nda::zeros<double>(n_dir, n_Om, n_w);
     auto Gamma_intra = nda::zeros<double>(n_dir, n_Om, n_w);
+    auto Gamma_inter = nda::zeros<double>(n_dir, n_Om, n_w);
 
     mpi::communicator comm = {};
     long n_k               = obe.H.n_k();
 
     for (auto k_idx : mpi::chunk(range(n_k), comm)) {
       double w_k = obe.H.k_weights(k_idx);
-      for (long sigma = 0; sigma < n_spin; ++sigma) {
+      for (auto sigma : range(n_spin)) {
         long sp = sigma_to_data_idx(spin_kind, sigma);
 
         // Precomputed intersection between the dispersion/A window and the velocity window (see band_velocities).
@@ -151,7 +152,7 @@ namespace triqs::modest {
         //   A2(j, n·n_ov + l) = A_k(ω_n)_{jl}   (n_ov, n_ω·n_ov).
         // Stacking turns each v·A (a matrix product for every ω) into a single GEMM over all ω at once.
         auto A2 = nda::matrix<dcomplex>(n_ov, n_w * n_ov);
-        for (long n = 0; n < n_w; ++n) {
+        for (auto n : range(n_w)) {
           auto Gsub                                       = nda::matrix<dcomplex>{G_band(n, A_slice, A_slice)};
           A2(r_all, nda::range(n * n_ov, (n + 1) * n_ov)) = nda::matrix<dcomplex>{im * (Gsub - dagger(Gsub)) / (2.0 * M_PI)};
         }
@@ -161,34 +162,47 @@ namespace triqs::modest {
         for (auto const &R : syms) {
           auto vR = detail::rotate_velocity_blocks(v_block, R); // vR[d] = Σ_c R(d,c) v_block[c]
 
-          // Batched v·A: one GEMM per needed direction, vA[d](n) = vR[d]·A(ω_n), stored as (n_ω, n_ov, n_ov).
-          // Computed once per symmetry and shared across all direction pairs below.
-          std::array<nda::array<dcomplex, 3>, 3> vA;
-          for (long d = 0; d < 3; ++d) {
+          // Compute the velocity-weighted spectral functions for each direction.
+          std::array<nda::array<dcomplex, 3>, 3> vA, vAd;
+          for (auto d : range(3)) {
             if (!need_dir[d]) continue;
-            auto vAd2 = nda::matrix<dcomplex>{vR[d] * A2}; // (n_ov, n_ω·n_ov) — single GEMM over all ω
-            vA[d]     = nda::array<dcomplex, 3>(n_w, n_ov, n_ov);
-            for (long n = 0; n < n_w; ++n) vA[d](n, r_all, r_all) = vAd2(r_all, nda::range(n * n_ov, (n + 1) * n_ov));
+            auto vA2 = nda::matrix<dcomplex>{vR[d] * A2}; // (n_ov, n_ω·n_ov) — single GEMM over all ω
+            vA[d]    = nda::array<dcomplex, 3>(n_w, n_ov, n_ov);
+            vAd[d]   = nda::array<dcomplex, 3>(n_w, n_ov, n_ov);
+            for (auto n : range(n_w)) {
+              vA[d](n, r_all, r_all) = vA2(r_all, nda::range(n * n_ov, (n + 1) * n_ov));
+              for (auto i : range(n_ov))
+                for (auto jj : range(n_ov)) vAd[d](n, i, jj) = vR[d](i, i) * A2(i, n * n_ov + jj);
+            }
           }
 
-          for (long ip = 0; ip < n_dir; ++ip) {
+          for (auto ip : range(n_dir)) {
             long a = dir_pairs[ip][0], b = dir_pairs[ip][1];
-            auto const &vA_a = vA[a]; // v_α · A, direction α = a
-            auto const &vA_b = vA[b]; // v_β · A, direction β = b
+            auto const &vA_a = vA[a];  // v_α   · A, direction α = a
+            auto const &vA_b = vA[b];  // v_β   · A, direction β = b
+            auto const &vd_a = vAd[a]; // v_α^d · A
+            auto const &vd_b = vAd[b]; // v_β^d · A
             for (auto n : range(n_w)) {
               for (auto iq : range(n_Om)) {
                 long j = n + iOm(iq);
                 if (j < 0 || j >= n_w) continue;
-                dcomplex tot  = 0;
-                dcomplex intr = 0;
-                // total = Tr[vA_a(ω+Ω) vA_b(ω)] = Σ_ij vA_a(j)_{ij} vA_b(n)_{ji}; intra = Σ_i vA_a(j)_{ii} vA_b(n)_{ii}.
+                // total = Tr[v_α A(ω+Ω) v_β A(ω)]
+                // intra = Tr[v_α^d A(ω+Ω) v_β^d A(ω)]   (diagonal velocity matrix elements)
+                // inter = Tr[v_α^o A(ω+Ω) v_β^o A(ω)]   (off-diagonal, v^o = v − v^d)
+                dcomplex tot = 0, dd = 0, oo = 0;
                 for (auto i : range(n_ov)) {
-                  intr += vA_a(j, i, i) * vA_b(n, i, i);
-                  for (auto jj : range(n_ov)) tot += vA_a(j, i, jj) * vA_b(n, jj, i);
+                  for (auto jj : range(n_ov)) {
+                    dcomplex a_f = vA_a(j, i, jj), a_d = vd_a(j, i, jj);
+                    dcomplex b_f = vA_b(n, jj, i), b_d = vd_b(n, jj, i);
+                    tot += a_f * b_f;
+                    dd += a_d * b_d;
+                    oo += (a_f - a_d) * (b_f - b_d);
+                  }
                 }
                 double f = w_k * sym_norm;
                 Gamma(ip, iq, n) += f * tot.real();
-                Gamma_intra(ip, iq, n) += f * intr.real();
+                Gamma_intra(ip, iq, n) += f * dd.real();
+                Gamma_inter(ip, iq, n) += f * oo.real();
               }
             }
           }
@@ -196,9 +210,9 @@ namespace triqs::modest {
       }
     }
 
-    Gamma            = mpi::all_reduce(Gamma);
-    Gamma_intra      = mpi::all_reduce(Gamma_intra);
-    auto Gamma_inter = nda::array<double, 3>{Gamma - Gamma_intra};
+    Gamma       = mpi::all_reduce(Gamma);
+    Gamma_intra = mpi::all_reduce(Gamma_intra);
+    Gamma_inter = mpi::all_reduce(Gamma_inter);
 
     Gamma /= V;
     Gamma_intra /= V;
@@ -221,9 +235,9 @@ namespace triqs::modest {
     auto const &vel = *obe.velocities;
     if (vel.n_directions() != 3)
       throw std::runtime_error{fmt::format("transport_function: expected 3 Cartesian velocity directions, got {}", vel.n_directions())};
-    double V = *obe.cell_volume;
-    auto spin_kind  = obe.C_space.spin_kind();
-    long n_spin     = (spin_kind == spin_kind_e::Polarized) ? 2 : 1;
+    double V       = *obe.cell_volume;
+    auto spin_kind = obe.C_space.spin_kind();
+    long n_spin    = (spin_kind == spin_kind_e::Polarized) ? 2 : 1;
 
     auto dir_pairs = detail::parse_directions(directions);
     long n_dir     = long(dir_pairs.size());
@@ -241,7 +255,7 @@ namespace triqs::modest {
 
     for (auto k_idx : mpi::chunk(range(n_k), comm)) {
       double w_k = obe.H.k_weights(k_idx);
-      for (long sigma = 0; sigma < n_spin; ++sigma) {
+      for (auto sigma : range(n_spin)) {
         long sp = sigma_to_data_idx(spin_kind, sigma);
 
         // Precomputed intersection between the dispersion/A window and the velocity window (see band_velocities).
@@ -251,18 +265,18 @@ namespace triqs::modest {
         if (n_ov <= 0) continue;
         auto v_slice = nda::range(v_off, v_off + n_ov);
 
-        auto Hk      = obe.H.H(sigma, k_idx);                              // diagonal band energies (assumes band basis)
+        auto Hk      = obe.H.H(sigma, k_idx);                               // diagonal band energies (assumes band basis)
         auto v_block = detail::velocity_blocks(vel, sigma, k_idx, v_slice); // per-direction (n_ov × n_ov)
 
         for (auto const &R : syms) {
           auto vR = detail::rotate_velocity_blocks(v_block, R); // vR[d] = Σ_c R(d,c) v_block[c]
-          for (long ip = 0; ip < n_dir; ++ip) {
+          for (auto ip : range(n_dir)) {
             long a = dir_pairs[ip][0], b = dir_pairs[ip][1];
-            for (long ib = 0; ib < n_ov; ++ib) {
+            for (auto ib : range(n_ov)) {
               double eps  = (Hk(a_off + ib, a_off + ib)).real(); // ε_n(k), measured from the same reference as omega
               double vv   = (vR[a](ib, ib) * vR[b](ib, ib)).real();
               double pref = w_k * sym_norm * vv;
-              for (long iw = 0; iw < n_w; ++iw) {
+              for (auto iw : range(n_w)) {
                 double d2 = omega(iw) - eps;
                 Phi(ip, iw) += pref * norm / (d2 * d2 + eta2);
               }
@@ -278,7 +292,9 @@ namespace triqs::modest {
     return {.Phi = std::move(Phi), .omega_mesh = omega, .directions = directions};
   }
 
-  // ------------------------------------------------------------------ h5 + printing
+  // ------------------------------------------------------------------
+  // h5 + printing
+  // ------------------------------------------------------------------
 
   void h5_read(h5::group g, std::string const &name, transport_distribution_t &x) {
     auto sg = g.open_group(name);
