@@ -879,10 +879,10 @@ PyMethodDef c2py::tp_methods<_c2py_cls_7>[] = {
 constexpr auto _c2py_doc_member_18 = R"DOC(Spin kind of the one-body data.)DOC";
 constexpr auto _c2py_doc_member_19 =
    R"DOC(:math:`v^{\sigma}_{\alpha\nu\nu'}(\mathbf{k})`: (n_k, n_sigma_data, 3, N_nu_max, N_nu_max). Cartesian index first so each :math:`v_\alpha(\mathbf{k})` is a contiguous matrix.)DOC";
-constexpr auto _c2py_doc_member_20 = R"DOC(Number of optics bands for each k-point and :math:`\sigma` (from `band_window_optics`).)DOC";
+constexpr auto _c2py_doc_member_20 = R"DOC(Number of velocity bands stored for each k-point and :math:`\sigma` (the joint window).)DOC";
 constexpr auto _c2py_doc_member_21 = R"DOC([n_sigma_data, n_k, 2] 1-based inclusive [b_min, b_max] of the dispersion/A array.)DOC";
-constexpr auto _c2py_doc_member_22 = R"DOC([n_sigma_data, n_k, 2] 1-based inclusive [b_min, b_max] of the velocity array.)DOC";
-constexpr auto _c2py_doc_member_23 = R"DOC([n_sigma_data, n_k, 3] precomputed intersection slices: (A_offset, v_offset, n_overlap).)DOC";
+constexpr auto _c2py_doc_member_22 = R"DOC([n_sigma_data, n_k, 2] 1-based inclusive [b_min, b_max] of the velocity array in the file.)DOC";
+constexpr auto _c2py_doc_member_23 = R"DOC([n_sigma_data, n_k, 3] intersection slices: (A_offset, v_offset, n_overlap); `v_offset` is 0.)DOC";
 constexpr auto _c2py_doc_member_24 = R"DOC(Cartesian 3x3 rotations R used to symmetrize the velocity direction index.)DOC";
 static PyObject *prop_get_dict_5(PyObject *self, void *) {
   auto &self_c = *(((c2py::wrap<_c2py_cls_7> *)self)->_c);
@@ -923,9 +923,10 @@ distribution :math:`\Gamma_{\alpha\beta}(\omega,\Omega)` and the transport funct
 :math:`\Phi_{\alpha\beta}(\omega)`. The velocities are read from the `dft_transp_input` group of a
 dft_tools converter archive (:math:`v_{\nu\nu'\alpha} = \partial_{k_\alpha} H_{\nu\nu'}` in the band basis).
 
-The velocities live on the (per-k) optics band window `band_window_optics`, which may differ from the band
-window `band_window` of the dispersion ``band_dispersion.`` Transport traces are taken over the per-k
-intersection of the two windows.)DOC"
+The file stores the velocities on the (per-k) optics band window `band_window_optics`, which may differ from
+the band window `band_window` of the dispersion ``band_dispersion.`` Transport traces are taken over the
+per-k intersection of the two windows, and the loader keeps only that intersection: bands outside it have no
+matching :math:`A(\omega)` and can never be read.)DOC"
    + std::string{"\n\n----------\n\n"} + c2py::tp_ctor_doc<_c2py_cls_7>;
 // --------- class _c2py_cls_8 -----------
 using _c2py_cls_8                                            = triqs::modest::one_body_elements_on_grid;
