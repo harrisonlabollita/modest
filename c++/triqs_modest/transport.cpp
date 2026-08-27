@@ -59,11 +59,11 @@ namespace triqs::modest {
       return vel.rot_symmetries;
     }
 
-    // Velocity block matrices v_α(k) for each Cartesian direction, restricted to the intersection window.
-    std::array<nda::matrix<dcomplex>, 3> velocity_blocks(band_velocities const &vel, long sigma, long k_idx, nda::range const &window) {
+    // Velocity block matrices v_α(k) for each Cartesian direction (already stored on the intersection window).
+    std::array<nda::matrix<dcomplex>, 3> velocity_blocks(band_velocities const &vel, long sigma, long k_idx) {
       auto vfull = vel.v(sigma, k_idx); // (3, N_ν_v, N_ν_v)
       std::array<nda::matrix<dcomplex>, 3> v_block;
-      for (long d = 0; d < 3; ++d) v_block[d] = nda::matrix<dcomplex>{vfull(d, window, window)};
+      for (long d = 0; d < 3; ++d) v_block[d] = nda::matrix<dcomplex>{vfull(d, r_all, r_all)};
       return v_block;
     }
 
@@ -136,15 +136,12 @@ namespace triqs::modest {
     for (auto k_idx : mpi::chunk(range(n_k), comm)) {
       double w_k = obe.H.k_weights(k_idx);
       for (auto sigma : range(n_spin)) {
-        long sp = sigma_to_data_idx(spin_kind, sigma);
-
-        // Precomputed intersection between the dispersion/A window and the velocity window (see band_velocities).
-        long a_off = vel.joint_window(sp, k_idx, 0);
-        long v_off = vel.joint_window(sp, k_idx, 1);
-        long n_ov  = vel.joint_window(sp, k_idx, 2);
+        // The velocities are stored on the intersection of the dispersion/A window and the velocity window, so
+        // only its offset into the A array is needed here (see band_velocities).
+        long a_off = vel.A_offset(sigma, k_idx);
+        long n_ov  = vel.N_nu_v(sigma, k_idx);
         if (n_ov <= 0) continue;
         auto A_slice = nda::range(a_off, a_off + n_ov);
-        auto v_slice = nda::range(v_off, v_off + n_ov);
 
         // Full band-basis G, then the block spectral function A = i(G − G†)/(2π) on the intersection.
         auto G_band = detail::build_G_band(obe, active, Sa_per_sigma[sigma], omegas, mu, k_idx, sigma);
@@ -157,7 +154,7 @@ namespace triqs::modest {
           A2(r_all, nda::range(n * n_ov, (n + 1) * n_ov)) = nda::matrix<dcomplex>{im * (Gsub - dagger(Gsub)) / (2.0 * M_PI)};
         }
 
-        auto v_block = detail::velocity_blocks(vel, sigma, k_idx, v_slice); // per-direction (n_ov × n_ov)
+        auto v_block = detail::velocity_blocks(vel, sigma, k_idx); // per-direction (n_ov × n_ov)
 
         for (auto const &R : syms) {
           auto vR = detail::rotate_velocity_blocks(v_block, R); // vR[d] = Σ_c R(d,c) v_block[c]
@@ -256,17 +253,14 @@ namespace triqs::modest {
     for (auto k_idx : mpi::chunk(range(n_k), comm)) {
       double w_k = obe.H.k_weights(k_idx);
       for (auto sigma : range(n_spin)) {
-        long sp = sigma_to_data_idx(spin_kind, sigma);
-
-        // Precomputed intersection between the dispersion/A window and the velocity window (see band_velocities).
-        long a_off = vel.joint_window(sp, k_idx, 0); // offset of the intersection into the H/band array
-        long v_off = vel.joint_window(sp, k_idx, 1);
-        long n_ov  = vel.joint_window(sp, k_idx, 2);
+        // The velocities are stored on the intersection of the dispersion/A window and the velocity window, so
+        // only its offset into the H/band array is needed here (see band_velocities).
+        long a_off = vel.A_offset(sigma, k_idx);
+        long n_ov  = vel.N_nu_v(sigma, k_idx);
         if (n_ov <= 0) continue;
-        auto v_slice = nda::range(v_off, v_off + n_ov);
 
-        auto Hk      = obe.H.H(sigma, k_idx);                               // diagonal band energies (assumes band basis)
-        auto v_block = detail::velocity_blocks(vel, sigma, k_idx, v_slice); // per-direction (n_ov × n_ov)
+        auto Hk      = obe.H.H(sigma, k_idx);                      // diagonal band energies (assumes band basis)
+        auto v_block = detail::velocity_blocks(vel, sigma, k_idx); // per-direction (n_ov × n_ov)
 
         for (auto const &R : syms) {
           auto vR = detail::rotate_velocity_blocks(v_block, R); // vR[d] = Σ_c R(d,c) v_block[c]

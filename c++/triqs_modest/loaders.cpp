@@ -350,28 +350,29 @@ namespace triqs::modest {
     }
 
     // Precompute the intersection ("joint") window between the dispersion/A window (band_window) and the
-    // velocity window (band_window_optics): (A_offset, v_offset, n_overlap) per (sigma, k). Done here so
-    // the transport kernels can slice directly instead of recomputing the intersection at every k.
-    auto joint_window  = nda::array<long, 3>(n_sigma_data, n_k, 3);
+    // velocity window (band_window_optics) per (sigma, k). Done here so the transport kernels can slice directly
+    // instead of recomputing the intersection at every k. Since the velocities are stored on the intersection
+    // itself, its width is just n_bands_per_k and only the A-side offset has to be carried around; the offset
+    // into the stored block is needed only while reading.
+    auto A_offsets     = nda::array<long, 2>(n_sigma_data, n_k);
     auto n_bands_per_k = nda::array<long, 2>(n_k, n_sigma_data);
+    auto v_src_offset  = nda::array<long, 2>(n_k, n_sigma_data);
     long N_nu_max      = 0;
     for (auto sp : range(n_sigma_data)) {
       for (auto ik : range(n_k)) {
-        long b_lo               = std::max(band_window(sp, ik, 0), band_window_optics(sp, ik, 0));
-        long b_hi               = std::min(band_window(sp, ik, 1), band_window_optics(sp, ik, 1));
-        long n_ov               = (b_hi >= b_lo) ? b_hi - b_lo + 1 : 0;
-        joint_window(sp, ik, 0) = b_lo - band_window(sp, ik, 0);        // offset into the H/A array
-        joint_window(sp, ik, 1) = b_lo - band_window_optics(sp, ik, 0); // offset into the stored velocity block
-        joint_window(sp, ik, 2) = n_ov;                                 // number of overlapping bands
-        n_bands_per_k(ik, sp)   = n_ov;
-        N_nu_max                = std::max(N_nu_max, n_ov);
+        long b_lo             = std::max(band_window(sp, ik, 0), band_window_optics(sp, ik, 0));
+        long b_hi             = std::min(band_window(sp, ik, 1), band_window_optics(sp, ik, 1));
+        A_offsets(sp, ik)     = b_lo - band_window(sp, ik, 0);        // offset into the H/A array
+        v_src_offset(ik, sp)  = b_lo - band_window_optics(sp, ik, 0); // offset into the stored velocity block
+        n_bands_per_k(ik, sp) = (b_hi >= b_lo) ? b_hi - b_lo + 1 : 0; // number of overlapping bands
+        N_nu_max              = std::max(N_nu_max, n_bands_per_k(ik, sp));
       }
     }
 
     // velocities are stored as nested [spin][k] ragged arrays. Only the joint window is kept, padded into a dense
     // (n_k, n_sigma, n_dir, N_nu_max, N_nu_max) block. A(ω) does not exist outside band_window, so bands outside
     // the intersection can never be read by the transport kernels, and padding to the full optics window dominated
-    // the memory footprint. The converter stores each block direction-last (nb, nb, n_dir); we transpose to 
+    // the memory footprint. The converter stores each block direction-last (nb, nb, n_dir); we transpose to
     // direction-first so that each v_alpha(k) is a contiguous (N_nu, N_nu) matrix.
     auto v_k = nda::zeros<dcomplex>(n_k, n_sigma_data, 3, N_nu_max, N_nu_max);
     long sp  = 0;
@@ -387,11 +388,11 @@ namespace triqs::modest {
         auto nb    = vel.extent(0);
         auto n_dir = vel.extent(2);
         if (nb != n_bands_optics(ik, sp))
-          throw std::runtime_error{
-              fmt::format("read_band_velocities_hdf5: velocities_k[{}][{}] stores {} bands, but band_window_optics implies {}.", sp, ik, nb, n_bands_optics(ik, sp))};
-        long n_ov = joint_window(sp, ik, 2);
+          throw std::runtime_error{fmt::format("read_band_velocities_hdf5: velocities_k[{}][{}] stores {} bands, but band_window_optics implies {}.",
+                                               sp, ik, nb, n_bands_optics(ik, sp))};
+        long n_ov = n_bands_per_k(ik, sp);
         if (n_ov > 0) {
-          auto src = nda::range(joint_window(sp, ik, 1), joint_window(sp, ik, 1) + n_ov);
+          auto src = nda::range(v_src_offset(ik, sp), v_src_offset(ik, sp) + n_ov);
           auto dst = nda::range(n_ov);
           for (auto a : range(n_dir)) v_k(ik, sp, a, dst, dst) = vel(src, src, a);
         }
@@ -399,9 +400,6 @@ namespace triqs::modest {
       }
       ++sp;
     }
-
-    // The velocities are now stored on the joint window itself, so the offset into them is zero.
-    joint_window(r_all, r_all, 1) = 0;
 
     // Cartesian symmetry operations: adapt to either a (n_sym, 3, 3) dataset or a list of 3x3 matrices.
     auto rot_symmetries = read_rot_symmetries(root["dft_misc_input"]["rot_symmetries"]);
@@ -411,7 +409,7 @@ namespace triqs::modest {
                            .n_bands_per_k      = std::move(n_bands_per_k),
                            .band_window        = std::move(band_window),
                            .band_window_optics = std::move(band_window_optics),
-                           .joint_window       = std::move(joint_window),
+                           .A_offsets          = std::move(A_offsets),
                            .rot_symmetries     = std::move(rot_symmetries)};
   }
 

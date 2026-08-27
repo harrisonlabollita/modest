@@ -196,10 +196,10 @@ namespace triqs::modest {
     spin_kind_e spin_kind; ///< Spin kind of the one-body data.
     nda::array<dcomplex, 5>
        v_k; ///< \f$ v^{\sigma}_{\alpha\nu\nu'}(\mathbf{k}) \f$: (n_k, n_sigma_data, 3, N_nu_max, N_nu_max). Cartesian index first so each \f$ v_\alpha(\mathbf{k}) \f$ is a contiguous matrix.
-    nda::array<long, 2> n_bands_per_k;      ///< Number of velocity bands stored for each k-point and \f$ \sigma \f$ (the joint window).
-    nda::array<long, 3> band_window;        ///< [n_sigma_data, n_k, 2] 1-based inclusive [b_min, b_max] of the dispersion/A array.
-    nda::array<long, 3> band_window_optics; ///< [n_sigma_data, n_k, 2] 1-based inclusive [b_min, b_max] of the velocity array in the file.
-    nda::array<long, 3> joint_window;       ///< [n_sigma_data, n_k, 3] intersection slices: (A_offset, v_offset, n_overlap); `v_offset` is 0.
+    nda::array<long, 2> n_bands_per_k;               ///< Number of velocity bands stored for each k-point and \f$ \sigma \f$ (the joint window).
+    nda::array<long, 3> band_window;                 ///< [n_sigma_data, n_k, 2] 1-based inclusive [b_min, b_max] of the dispersion/A array.
+    nda::array<long, 3> band_window_optics;          ///< [n_sigma_data, n_k, 2] 1-based inclusive [b_min, b_max] of the velocity array in the file.
+    nda::array<long, 2> A_offsets;                   ///< [n_sigma_data, n_k] offset of the stored bands into the dispersion/A array.
     std::vector<nda::matrix<double>> rot_symmetries; ///< Cartesian 3x3 rotations R used to symmetrize the velocity direction index.
 
     /// Equality comparison operator.
@@ -212,7 +212,7 @@ namespace triqs::modest {
       mpi::broadcast(x.n_bands_per_k, c, root);
       mpi::broadcast(x.band_window, c, root);
       mpi::broadcast(x.band_window_optics, c, root);
-      mpi::broadcast(x.joint_window, c, root);
+      mpi::broadcast(x.A_offsets, c, root);
       mpi::broadcast(x.rot_symmetries, c, root);
     }
 
@@ -221,7 +221,7 @@ namespace triqs::modest {
      *
      * @param sigma Spin index \f$ \sigma \f$.
      * @param k_idx Index of the k-point in the grid.
-     * @return Const view of shape (3, N_nu, N_nu), sliced to the active optics bands. The leading index is the
+     * @return Const view of shape (3, N_nu, N_nu), sliced to the joint window. The leading index is the
      * Cartesian direction, so `v(sigma, k)(alpha, _, _)` is a contiguous \f$ N_\nu \times N_\nu \f$ matrix.
      */
     [[nodiscard]] nda::array_const_view<dcomplex, 3> v(long sigma, long k_idx) const {
@@ -230,8 +230,11 @@ namespace triqs::modest {
       return v_k(k_idx, sigma_p, r_all, R_nu, R_nu);
     }
 
-    /// Number of optics bands for a given k-point and spin \f$ \sigma \f$.
+    /// Number of velocity bands stored for a given k-point and spin \f$ \sigma \f$ (the joint window width).
     [[nodiscard]] long N_nu_v(long sigma, long k_idx) const { return n_bands_per_k(k_idx, sigma_to_data_idx(spin_kind, sigma)); }
+
+    /// Offset of the stored velocity bands into the dispersion/A array for a given k-point and spin \f$ \sigma \f$.
+    [[nodiscard]] long A_offset(long sigma, long k_idx) const { return A_offsets(sigma_to_data_idx(spin_kind, sigma), k_idx); }
 
     /// Number of k-points in the grid.
     [[nodiscard]] long n_k() const { return v_k.extent(0); }

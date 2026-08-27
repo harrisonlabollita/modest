@@ -798,7 +798,7 @@ static int synth_constructor_5(PyObject *self, PyObject *args, PyObject *kwargs)
   de("n_bands_per_k", self_c.n_bands_per_k, false);
   de("band_window", self_c.band_window, false);
   de("band_window_optics", self_c.band_window_optics, false);
-  de("joint_window", self_c.joint_window, false);
+  de("A_offsets", self_c.A_offsets, false);
   de("rot_symmetries", self_c.rot_symmetries, false);
   return de.check();
 }
@@ -821,7 +821,7 @@ band_window : {par_3}
 
 band_window_optics : {par_4}
 
-joint_window : {par_5}
+A_offsets : {par_5}
 
 rot_symmetries : {par_6}
 
@@ -833,22 +833,29 @@ rot_symmetries : {par_6}
     c2py::python_typename<nda::basic_array<long, 2, nda::C_layout, 'A', nda::heap_basic<nda::mem::mallocator<nda::mem::AddressSpace::Host>>>>(),
     c2py::python_typename<nda::basic_array<long, 3, nda::C_layout, 'A', nda::heap_basic<nda::mem::mallocator<nda::mem::AddressSpace::Host>>>>(),
     c2py::python_typename<nda::basic_array<long, 3, nda::C_layout, 'A', nda::heap_basic<nda::mem::mallocator<nda::mem::AddressSpace::Host>>>>(),
-    c2py::python_typename<nda::basic_array<long, 3, nda::C_layout, 'A', nda::heap_basic<nda::mem::mallocator<nda::mem::AddressSpace::Host>>>>(),
+    c2py::python_typename<nda::basic_array<long, 2, nda::C_layout, 'A', nda::heap_basic<nda::mem::mallocator<nda::mem::AddressSpace::Host>>>>(),
     c2py::python_typename<
        std::vector<nda::basic_array<double, 2, nda::C_layout, 'M', nda::heap_basic<nda::mem::mallocator<nda::mem::AddressSpace::Host>>>>>()});
-// N_nu_v
+// A_offset
 static auto const _c2py_fun_6 = c2py::dispatcher_f_kw_t{c2py::cmethod(
+   [](_c2py_cls_7 const &self, long sigma, long k_idx) -> decltype(auto) { return self.A_offset(sigma, k_idx); }, "self", "sigma", "k_idx")};
+
+// N_nu_v
+static auto const _c2py_fun_7 = c2py::dispatcher_f_kw_t{c2py::cmethod(
    [](_c2py_cls_7 const &self, long sigma, long k_idx) -> decltype(auto) { return self.N_nu_v(sigma, k_idx); }, "self", "sigma", "k_idx")};
 
 // v
-static auto const _c2py_fun_7 = c2py::dispatcher_f_kw_t{
+static auto const _c2py_fun_8 = c2py::dispatcher_f_kw_t{
    c2py::cmethod([](_c2py_cls_7 const &self, long sigma, long k_idx) -> decltype(auto) { return self.v(sigma, k_idx); }, "self", "sigma", "k_idx")};
 
 static const auto _c2py_doc_6 = _c2py_fun_6.doc(R"DOC(
-Number of optics bands for a given k-point and spin :math:`\sigma`.
+Offset of the stored velocity bands into the dispersion/A array for a given k-point and spin :math:`\sigma`.
 )DOC");
-static const auto _c2py_doc_7 =
-   _c2py_fun_7.doc(R"DOC(
+static const auto _c2py_doc_7 = _c2py_fun_7.doc(R"DOC(
+Number of velocity bands stored for a given k-point and spin :math:`\sigma` (the joint window width).
+)DOC");
+static const auto _c2py_doc_8 =
+   _c2py_fun_8.doc(R"DOC(
 Get :math:`v^{\sigma}_{\nu\nu'\alpha}(\mathbf{k})` for a given :math:`\mathbf{k}` and :math:`\sigma`.
 
 Parameters
@@ -861,7 +868,7 @@ k_idx : {par_1}
 Returns
 -------
 {ret_0}
-   Const view of shape (3, N_nu, N_nu), sliced to the active optics bands. The leading index is the
+   Const view of shape (3, N_nu, N_nu), sliced to the joint window. The leading index is the
    Cartesian direction, so `v(sigma, k)(alpha, _, _)` is a contiguous :math:`N_\nu \times N_\nu` matrix.
 )DOC",
                    {{c2py::python_typename<long>()}, {c2py::python_typename<long>()}},
@@ -871,8 +878,9 @@ Returns
 // ----- Method table ----
 template <>
 PyMethodDef c2py::tp_methods<_c2py_cls_7>[] = {
-   {"N_nu_v", (PyCFunction)c2py::pyfkw<_c2py_fun_6>, METH_VARARGS | METH_KEYWORDS, _c2py_doc_6.c_str()},
-   {"v", (PyCFunction)c2py::pyfkw<_c2py_fun_7>, METH_VARARGS | METH_KEYWORDS, _c2py_doc_7.c_str()},
+   {"A_offset", (PyCFunction)c2py::pyfkw<_c2py_fun_6>, METH_VARARGS | METH_KEYWORDS, _c2py_doc_6.c_str()},
+   {"N_nu_v", (PyCFunction)c2py::pyfkw<_c2py_fun_7>, METH_VARARGS | METH_KEYWORDS, _c2py_doc_7.c_str()},
+   {"v", (PyCFunction)c2py::pyfkw<_c2py_fun_8>, METH_VARARGS | METH_KEYWORDS, _c2py_doc_8.c_str()},
    {nullptr, nullptr, 0, nullptr} // Sentinel
 };
 
@@ -882,7 +890,7 @@ constexpr auto _c2py_doc_member_19 =
 constexpr auto _c2py_doc_member_20 = R"DOC(Number of velocity bands stored for each k-point and :math:`\sigma` (the joint window).)DOC";
 constexpr auto _c2py_doc_member_21 = R"DOC([n_sigma_data, n_k, 2] 1-based inclusive [b_min, b_max] of the dispersion/A array.)DOC";
 constexpr auto _c2py_doc_member_22 = R"DOC([n_sigma_data, n_k, 2] 1-based inclusive [b_min, b_max] of the velocity array in the file.)DOC";
-constexpr auto _c2py_doc_member_23 = R"DOC([n_sigma_data, n_k, 3] intersection slices: (A_offset, v_offset, n_overlap); `v_offset` is 0.)DOC";
+constexpr auto _c2py_doc_member_23 = R"DOC([n_sigma_data, n_k] offset of the stored bands into the dispersion/A array.)DOC";
 constexpr auto _c2py_doc_member_24 = R"DOC(Cartesian 3x3 rotations R used to symmetrize the velocity direction index.)DOC";
 static PyObject *prop_get_dict_5(PyObject *self, void *) {
   auto &self_c = *(((c2py::wrap<_c2py_cls_7> *)self)->_c);
@@ -892,7 +900,7 @@ static PyObject *prop_get_dict_5(PyObject *self, void *) {
   dic["n_bands_per_k"]      = self_c.n_bands_per_k;
   dic["band_window"]        = self_c.band_window;
   dic["band_window_optics"] = self_c.band_window_optics;
-  dic["joint_window"]       = self_c.joint_window;
+  dic["A_offsets"]          = self_c.A_offsets;
   dic["rot_symmetries"]     = self_c.rot_symmetries;
   return dic.new_ref();
 }
@@ -908,7 +916,7 @@ constinit PyGetSetDef c2py::tp_getset<_c2py_cls_7>[] = {
    c2py::getsetdef_from_member<&_c2py_cls_7::n_bands_per_k, _c2py_cls_7>("n_bands_per_k", _c2py_doc_member_20),
    c2py::getsetdef_from_member<&_c2py_cls_7::band_window, _c2py_cls_7>("band_window", _c2py_doc_member_21),
    c2py::getsetdef_from_member<&_c2py_cls_7::band_window_optics, _c2py_cls_7>("band_window_optics", _c2py_doc_member_22),
-   c2py::getsetdef_from_member<&_c2py_cls_7::joint_window, _c2py_cls_7>("joint_window", _c2py_doc_member_23),
+   c2py::getsetdef_from_member<&_c2py_cls_7::A_offsets, _c2py_cls_7>("A_offsets", _c2py_doc_member_23),
    c2py::getsetdef_from_member<&_c2py_cls_7::rot_symmetries, _c2py_cls_7>("rot_symmetries", _c2py_doc_member_24),
    {"n_directions", c2py::getter_from_method<c2py::castmc<>(&triqs::modest::band_velocities::n_directions)>, nullptr, prop_doc_12, nullptr},
    {"n_k", c2py::getter_from_method<c2py::castmc<>(&triqs::modest::band_velocities::n_k)>, nullptr, prop_doc_13, nullptr},
@@ -1097,34 +1105,34 @@ const std::string c2py::tp_doc<_c2py_cls_9> =
 // ==================== module functions ====================
 
 // make_one_body_elements_gw
-static auto const _c2py_fun_8 = c2py::dispatcher_f_kw_t{
+static auto const _c2py_fun_9 = c2py::dispatcher_f_kw_t{
    c2py::cfun([](const std::string &filename, double threshold,
                  bool diagonalize_hloc) { return triqs::modest::make_one_body_elements_gw(filename, threshold, diagonalize_hloc); },
               "filename", "threshold"_a = 1e-5, "diagonalize_hloc"_a = false)};
 
 // one_body_elements_from_dft_converter
-static auto const _c2py_fun_9 = c2py::dispatcher_f_kw_t{c2py::cfun(
+static auto const _c2py_fun_10 = c2py::dispatcher_f_kw_t{c2py::cfun(
    [](const std::string &filename, double threshold, bool diagonalize_hloc, bool read_velocities) {
      return triqs::modest::one_body_elements_from_dft_converter(filename, threshold, diagonalize_hloc, read_velocities);
    },
    "filename", "threshold"_a = 1.e-5, "diagonalize_hloc"_a = false, "read_velocities"_a = false)};
 
 // one_body_elements_on_high_symmetry_path
-static auto const _c2py_fun_10 = c2py::dispatcher_f_kw_t{c2py::cfun(
+static auto const _c2py_fun_11 = c2py::dispatcher_f_kw_t{c2py::cfun(
    [](const std::string &filename, const triqs::modest::one_body_elements_on_grid &obe) {
      return triqs::modest::one_body_elements_on_high_symmetry_path(filename, obe);
    },
    "filename", "obe")};
 
 // one_body_elements_with_partial_projectors
-static auto const _c2py_fun_11 = c2py::dispatcher_f_kw_t{c2py::cfun(
+static auto const _c2py_fun_12 = c2py::dispatcher_f_kw_t{c2py::cfun(
    [](const std::string &filename, const triqs::modest::one_body_elements_on_grid &obe) {
      return triqs::modest::one_body_elements_with_partial_projectors(filename, obe);
    },
    "filename", "obe")};
 
 // rotate_local_basis
-static auto const _c2py_fun_12 = c2py::dispatcher_f_kw_t{
+static auto const _c2py_fun_13 = c2py::dispatcher_f_kw_t{
    c2py::cfun(
       [](const nda::basic_array<
             nda::basic_array<std::complex<double>, 2, nda::C_layout, 'M', nda::heap_basic<nda::mem::mallocator<nda::mem::AddressSpace::Host>>>, 2,
@@ -1138,8 +1146,8 @@ static auto const _c2py_fun_12 = c2py::dispatcher_f_kw_t{
          const triqs::modest::one_body_elements_on_grid &x) { return triqs::modest::rotate_local_basis(U, x); },
       "U", "x")};
 
-static const auto _c2py_doc_8 =
-   _c2py_fun_8.doc(R"DOC(
+static const auto _c2py_doc_9 =
+   _c2py_fun_9.doc(R"DOC(
 Create a one-body elements for GW calculations with CoQui.
 
 Using the data from the "dft_input" group, the local space and downfolding projector
@@ -1157,7 +1165,7 @@ Returns
    One-body elements for GW calculations.
 )DOC",
                    {{c2py::python_typename<const std::string &>()}}, {c2py::python_typename<triqs::modest::one_body_elements_gw>()});
-static const auto _c2py_doc_9 = _c2py_fun_9.doc(R"DOC(
+static const auto _c2py_doc_10 = _c2py_fun_10.doc(R"DOC(
 Create a one-body elements with orthonormalized projectors.
 
 Using the data from the "dft_input" group, the band dispersion, local space, downfolding projector, and optional
@@ -1214,13 +1222,13 @@ Returns
 {ret_0}
    The total electron density and a one-body elements.
 )DOC",
-                                                {{c2py::python_typename<const std::string &>()},
-                                                 {c2py::python_typename<double>()},
-                                                 {c2py::python_typename<bool>()},
-                                                 {c2py::python_typename<bool>()}},
-                                                {c2py::python_typename<std::pair<double, triqs::modest::one_body_elements_on_grid>>()});
-static const auto _c2py_doc_10 =
-   _c2py_fun_10.doc(R"DOC(
+                                                  {{c2py::python_typename<const std::string &>()},
+                                                   {c2py::python_typename<double>()},
+                                                   {c2py::python_typename<bool>()},
+                                                   {c2py::python_typename<bool>()}},
+                                                  {c2py::python_typename<std::pair<double, triqs::modest::one_body_elements_on_grid>>()});
+static const auto _c2py_doc_11 =
+   _c2py_fun_11.doc(R"DOC(
 Create a one-body elements along specific k-path.
 
 Using the data from the "dft_bands_input" group, the band disperion and downfolding projector
@@ -1241,8 +1249,8 @@ Returns
 )DOC",
                     {{c2py::python_typename<const std::string &>()}, {c2py::python_typename<const triqs::modest::one_body_elements_on_grid &>()}},
                     {c2py::python_typename<triqs::modest::one_body_elements_on_grid>()});
-static const auto _c2py_doc_11 =
-   _c2py_fun_11.doc(R"DOC(
+static const auto _c2py_doc_12 =
+   _c2py_fun_12.doc(R"DOC(
 Create a one-body elements with partial (all-atom) projectors.
 
 Using the data from the "dft_parproj_input" group, the local space, downfolding projectors,
@@ -1263,7 +1271,7 @@ Returns
 )DOC",
                     {{c2py::python_typename<const std::string &>()}, {c2py::python_typename<const triqs::modest::one_body_elements_on_grid &>()}},
                     {c2py::python_typename<triqs::modest::one_body_elements_on_grid>()});
-static const auto _c2py_doc_12 = _c2py_fun_12.doc(
+static const auto _c2py_doc_13 = _c2py_fun_13.doc(
    R"DOC(
 [1] Change basis
 
@@ -1293,11 +1301,11 @@ Returns
 //--------------------- module function table  -----------------------------
 
 static PyMethodDef module_methods[] = {
-   {"make_one_body_elements_gw", (PyCFunction)c2py::pyfkw<_c2py_fun_8>, METH_VARARGS | METH_KEYWORDS, _c2py_doc_8.c_str()},
-   {"one_body_elements_from_dft_converter", (PyCFunction)c2py::pyfkw<_c2py_fun_9>, METH_VARARGS | METH_KEYWORDS, _c2py_doc_9.c_str()},
-   {"one_body_elements_on_high_symmetry_path", (PyCFunction)c2py::pyfkw<_c2py_fun_10>, METH_VARARGS | METH_KEYWORDS, _c2py_doc_10.c_str()},
-   {"one_body_elements_with_partial_projectors", (PyCFunction)c2py::pyfkw<_c2py_fun_11>, METH_VARARGS | METH_KEYWORDS, _c2py_doc_11.c_str()},
-   {"rotate_local_basis", (PyCFunction)c2py::pyfkw<_c2py_fun_12>, METH_VARARGS | METH_KEYWORDS, _c2py_doc_12.c_str()},
+   {"make_one_body_elements_gw", (PyCFunction)c2py::pyfkw<_c2py_fun_9>, METH_VARARGS | METH_KEYWORDS, _c2py_doc_9.c_str()},
+   {"one_body_elements_from_dft_converter", (PyCFunction)c2py::pyfkw<_c2py_fun_10>, METH_VARARGS | METH_KEYWORDS, _c2py_doc_10.c_str()},
+   {"one_body_elements_on_high_symmetry_path", (PyCFunction)c2py::pyfkw<_c2py_fun_11>, METH_VARARGS | METH_KEYWORDS, _c2py_doc_11.c_str()},
+   {"one_body_elements_with_partial_projectors", (PyCFunction)c2py::pyfkw<_c2py_fun_12>, METH_VARARGS | METH_KEYWORDS, _c2py_doc_12.c_str()},
+   {"rotate_local_basis", (PyCFunction)c2py::pyfkw<_c2py_fun_13>, METH_VARARGS | METH_KEYWORDS, _c2py_doc_13.c_str()},
    {nullptr, nullptr, 0, nullptr} // Sentinel
 };
 

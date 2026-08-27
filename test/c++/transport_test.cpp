@@ -117,17 +117,14 @@ TEST(transport_tests, woodbury_nonzero_sigma) { // NOLINT
   for (long k = 0; k < obe.H.n_k(); ++k) {
     double wk = obe.H.k_weights(k);
     for (long s = 0; s < n_spin; ++s) {
-      long sp    = sigma_to_data_idx(spin_kind, s);
-      long a_off = vel.joint_window(sp, k, 0);
-      long v_off = vel.joint_window(sp, k, 1);
-      long n_ov  = vel.joint_window(sp, k, 2);
+      long a_off = vel.A_offset(s, k);
+      long n_ov  = vel.N_nu_v(s, k);
       if (n_ov <= 0) continue;
       long N_nu                = obe.H.N_nu(s, k);
       nda::matrix<dcomplex> Hk = obe.H.H(s, k);
       auto PSP                 = triqs::modest::detail::upfold_self_energy_all_freq(obe, obe.P, Sigma_w, k, s); // (n_w, N_nu, N_nu)
 
       auto A_sl = nda::range(a_off, a_off + n_ov);
-      auto v_sl = nda::range(v_off, v_off + n_ov);
       std::vector<nda::matrix<dcomplex>> A(n_w);
       for (long n = 0; n < n_w; ++n) {
         nda::matrix<dcomplex> Ginv = -Hk;
@@ -141,7 +138,7 @@ TEST(transport_tests, woodbury_nonzero_sigma) { // NOLINT
 
       auto vfull = vel.v(s, k); // (3, N_nu_v, N_nu_v)
       std::array<nda::matrix<dcomplex>, 3> vb;
-      for (long d = 0; d < 3; ++d) vb[d] = nda::matrix<dcomplex>{vfull(d, v_sl, v_sl)};
+      for (long d = 0; d < 3; ++d) vb[d] = nda::matrix<dcomplex>{vfull(d, r_all, r_all)};
 
       for (auto const &R : syms) {
         std::array<nda::matrix<dcomplex>, 3> vR;
