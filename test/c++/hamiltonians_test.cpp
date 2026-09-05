@@ -68,6 +68,76 @@ TEST(hamiltonian_test, kanamori_from_embedding) {
   EXPECT_TRUE((h_int1 - h_int2).is_zero());
 }
 
+// Kanamori averages of a Coulomb tensor: (U_avg, J_avg). These are basis independent for a full shell, so they
+// must return U_int and J_hund whatever orbital basis the tensor was rotated into.
+std::pair<double, double> kanamori_averages(nda::array<dcomplex, 4> const &U) {
+  auto N       = U.extent(0);
+  auto U_avg   = 0.0;
+  auto UmJ_avg = 0.0;
+  for (auto [m, mp] : product(range(N), range(N))) {
+    U_avg += real(U(m, mp, m, mp));
+    if (m != mp) UmJ_avg += real(U(m, mp, m, mp)) - real(U(m, mp, mp, m));
+  }
+  U_avg /= double(N * N);
+  UmJ_avg /= double(N * (N - 1));
+  return {U_avg, U_avg - UmJ_avg};
+}
+
+TEST(hamiltonian_tests, slater_tensor_uses_shell_l_not_orbital_count) {
+  // SrVO3 t2g: the correlated space has 3 orbitals but the shell is l = 2. The tensor must be built for the
+  // full 5-orbital shell -- inferring l from the orbital count would give l = 1 and the wrong physics.
+  auto [_, obe]  = one_body_elements_from_dft_converter("ref_data/svo-wien2k.ref.h5", 1.e-3);
+  auto const &C  = obe.C_space;
+  auto const &sh = C.atomic_shells()[0];
+  EXPECT_EQ(sh.dim, 3);
+  EXPECT_EQ(sh.l, 2);
+
+  auto U_shell = slater_tensor(C, 0, 3.0, 0.5);
+  for (int ax = 0; ax < 4; ++ax) EXPECT_EQ(U_shell.extent(ax), 5);
+
+  auto [U_avg, J_avg] = kanamori_averages(U_shell);
+  EXPECT_NEAR(U_avg, 3.0, 1e-12);
+  EXPECT_NEAR(J_avg, 0.5, 1e-12);
+
+  // identical to building it by hand at l = 2 with the stored rotation
+  auto ref = U_matrix_slater_local(2, C.rotation_from_spherical_to_dft_basis()(0), 3.0, 0.5);
+  EXPECT_ARRAY_NEAR(U_shell, ref, 1e-14);
+}
+
+TEST(hamiltonian_tests, to_local_basis_requires_orbitals_for_a_subshell) {
+  auto [_, obe] = one_body_elements_from_dft_converter("ref_data/svo-wien2k.ref.h5", 1.e-3);
+  auto const &C = obe.C_space;
+  auto U_shell  = slater_tensor(C, 0, 3.0, 0.5);
+
+  // dim (3) < 2l+1 (5): the shell orbitals spanned by the projectors cannot be inferred
+  EXPECT_THROW(to_local_basis(U_shell, C, 0), std::runtime_error);
+  EXPECT_THROW(to_local_basis(U_shell, C, 0, std::vector<long>{0, 1}), std::runtime_error);    // wrong count
+  EXPECT_THROW(to_local_basis(U_shell, C, 0, std::vector<long>{0, 1, 5}), std::runtime_error); // out of shell
+
+  auto orbs  = std::vector<long>{0, 1, 3};
+  auto U_loc = to_local_basis(U_shell, C, 0, orbs);
+  for (int ax = 0; ax < 4; ++ax) EXPECT_EQ(U_loc.extent(ax), 3);
+
+  // equivalent to selecting the orbitals and then applying transpose(R) by hand
+  auto U_sel = nda::zeros<dcomplex>(3, 3, 3, 3);
+  for (auto [i, j, k, m] : product(range(3), range(3), range(3), range(3))) U_sel(i, j, k, m) = U_shell(orbs[i], orbs[j], orbs[k], orbs[m]);
+  EXPECT_ARRAY_NEAR(U_loc, rotate_U_matrix_slater(U_sel, nda::matrix<dcomplex>{transpose(C.rotation_from_dft_to_local_basis()(0, 0))}), 1e-14);
+}
+
+TEST(hamiltonian_tests, slater_tensor_full_shell_for_several_l) {
+  // NiO: a full d shell (l = 2) and a full p shell (l = 1). Both span their whole shell, so no orbital
+  // selection is needed and both must return the input U and J.
+  auto [_, obe] = one_body_elements_from_dft_converter("ref_data/nio.ref.h5", 1.e-3);
+  auto const &C = obe.C_space;
+  for (auto [atom, n_shell] : std::vector<std::pair<long, long>>{{0, 5}, {1, 3}}) {
+    auto U_loc = to_local_basis(slater_tensor(C, atom, 3.0, 0.5), C, atom);
+    EXPECT_EQ(U_loc.extent(0), n_shell);
+    auto [U_avg, J_avg] = kanamori_averages(U_loc);
+    EXPECT_NEAR(U_avg, 3.0, 1e-12);
+    EXPECT_NEAR(J_avg, 0.5, 1e-12);
+  }
+}
+
 TEST(hamiltonian_tests, radial_integrals_reject_unsupported_l) {
   // l = 0 and l > 3 used to return an all-zero tensor rather than complaining.
   EXPECT_THROW(U_matrix_slater_spherical(0, 3.0, 0.5), std::runtime_error);

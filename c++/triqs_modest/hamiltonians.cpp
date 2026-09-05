@@ -152,6 +152,106 @@ namespace triqs {
     return rotate_U_matrix_slater(nda::array<dcomplex, 4>{Uspherical}, sph_to_local); // rotate spherical U to local basis
   }
 
+  // ----------------------------------------------------
+  // Look up the atomic shell `atom` of `C_space`, checking the index is in range.
+  namespace detail {
+    modest::atomic_orbs const &shell_at(modest::local_space const &C_space, long atom, std::string_view who) {
+      auto const &shells = C_space.atomic_shells();
+      if (atom < 0 or atom >= long(shells.size()))
+        throw std::runtime_error(fmt::format("[{}] atom index {} is out of range: C_space has {} atomic shells.", who, atom, shells.size()));
+      return shells[atom];
+    }
+  } // namespace detail
+
+  nda::array<dcomplex, 4> slater_tensor(modest::local_space const &C_space, long atom, double U_int, double J_hund) {
+
+    auto const &shell = detail::shell_at(C_space, atom, "slater_tensor");
+    auto n_shell      = 2 * shell.l + 1;
+
+    auto const &s2d_all = C_space.rotation_from_spherical_to_dft_basis();
+    if (s2d_all.size() == 0)
+      throw std::runtime_error(
+         "[slater_tensor] This C_space carries no spherical-to-DFT rotation. Build the tensor explicitly with "
+         "U_matrix_slater_spherical and rotate_U_matrix_slater instead.");
+
+    auto const &s2d = s2d_all(atom);
+    if (s2d.empty())
+      throw std::runtime_error(
+         fmt::format("[slater_tensor] atom {} (l = {}) has no spherical-to-DFT rotation: its DFT code does not define one for "
+                     "this shell. Build the tensor with U_matrix_slater_spherical and rotate_U_matrix_slater instead.",
+                     atom, shell.l));
+    if (s2d.extent(0) != n_shell or s2d.extent(1) != n_shell)
+      throw std::runtime_error(fmt::format("[slater_tensor] atom {} has l = {} (shell of {} orbitals) but its spherical-to-DFT rotation is {}x{}.",
+                                           atom, shell.l, n_shell, s2d.extent(0), s2d.extent(1)));
+
+    // Full (2l+1) shell in the spherical basis, rotated to the DFT orbital basis. Note this is the *shell*
+    // dimension, which is >= shell.dim whenever the correlated space covers only part of the shell.
+    return rotate_U_matrix_slater(nda::array<dcomplex, 4>{U_matrix_slater_spherical(shell.l, U_int, J_hund)}, s2d);
+  }
+
+  // ----------------------------------------------------
+
+  nda::array<dcomplex, 4> to_local_basis(nda::array<dcomplex, 4> const &U_tensor, modest::local_space const &C_space, long atom,
+                                         std::optional<std::vector<long>> const &orbs) {
+
+    auto const &shell = detail::shell_at(C_space, atom, "to_local_basis");
+    auto n_shell      = 2 * shell.l + 1;
+    auto dim          = shell.dim;
+
+    for (int ax = 0; ax < 4; ++ax)
+      if (U_tensor.extent(ax) != n_shell)
+        throw std::runtime_error(
+           fmt::format("[to_local_basis] atom {} has l = {}, so the shell tensor must have extent {} on every axis, but axis "
+                       "{} has extent {}.",
+                       atom, shell.l, n_shell, ax, U_tensor.extent(ax)));
+
+    // Resolve which shell orbitals the correlated space spans.
+    std::vector<long> sel;
+    if (orbs) {
+      sel = *orbs;
+      if (long(sel.size()) != dim)
+        throw std::runtime_error(
+           fmt::format("[to_local_basis] atom {} has {} correlated orbitals but {} orbital indices were given.", atom, dim, sel.size()));
+      for (auto o : sel)
+        if (o < 0 or o >= n_shell)
+          throw std::runtime_error(
+             fmt::format("[to_local_basis] orbital index {} is out of range for an l = {} shell of {} orbitals.", o, shell.l, n_shell));
+    } else {
+      if (dim != n_shell)
+        throw std::runtime_error(fmt::format(
+           "[to_local_basis] atom {} has l = {} ({} orbitals in the shell) but only {} correlated orbitals, so `orbs` is required: which orbitals "
+           "of the shell the projectors span is not recorded by the DFT converters. Pass their positions in the shell, in the orbital ordering of "
+           "your DFT code.",
+           atom, shell.l, n_shell, dim));
+      sel = range(n_shell) | tl::to<std::vector<long>>();
+    }
+
+    // Restrict the shell tensor to the correlated orbitals.
+    auto U_sel = nda::zeros<dcomplex>(dim, dim, dim, dim);
+    for (auto [i, j, k, m] : product(range(dim), range(dim), range(dim), range(dim))) U_sel(i, j, k, m) = U_tensor(sel[i], sel[j], sel[k], sel[m]);
+
+    auto const &R_all = C_space.rotation_from_dft_to_local_basis();
+    if (R_all.size() == 0) return U_sel; // no local rotation was applied to the one-body elements either
+
+    // The Coulomb tensor is spin-independent, so a sigma-dependent local basis has no single answer.
+    auto const &R = R_all(atom, 0);
+    for (auto sigma : range(1, C_space.n_sigma()))
+      if (max_element(abs(make_regular(R_all(atom, sigma) - R))) > 1e-10)
+        throw std::runtime_error(
+           fmt::format("[to_local_basis] atom {} has a sigma-dependent DFT-to-local rotation, so the Coulomb tensor has no "
+                       "unique local basis. Rotate it yourself with rotate_U_matrix_slater.",
+                       atom));
+
+    if (R.extent(0) != dim or R.extent(1) != dim)
+      throw std::runtime_error(fmt::format("[to_local_basis] atom {} has {} correlated orbitals but its DFT-to-local rotation is {}x{}.", atom, dim,
+                                           R.extent(0), R.extent(1)));
+
+    // The one-body elements are rotated as P <- dagger(R) P, i.e. R acts on the operators.
+    // rotate_U_matrix_slater takes the matrix acting on the orbitals, which is its conjugate:
+    // conj(dagger(R)) = transpose(R). The two agree for real R, so no reference dataset separates them.
+    return rotate_U_matrix_slater(U_sel, transpose(R));
+  }
+
   operators::many_body_operator h_int_kanamori(nda::matrix<double> const &Umat, nda::matrix<double> const &Upmat, double J_hund, long n_orb,
                                                std::vector<std::string> const &spin_names, kanamori_params const &params) {
 
