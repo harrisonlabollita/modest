@@ -15,7 +15,7 @@ namespaces = "triqs triqs::modest"
 #    if reject_names and reject_names match Qname : skip X
 #    else keep X.
 
-match_names = "triqs::(make_density_density|make_kanamori|make_slater|U_matrix_in_spherical_basis)"
+match_names = "triqs::(make_density_density|make_kanamori|make_slater|slater_tensor|to_local_basis|U_matrix_kanamori|U_matrix_slater_spherical|U_matrix_slater_local|rotate_U_matrix_slater)"
 
 # Only keep elements declared in files matching the pattern
 # match_files = "" # String must be a regex
