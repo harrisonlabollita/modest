@@ -16,6 +16,10 @@ These abstractions let you describe complex DMFT problems -- from simple single-
 
 from triqs.experimental import *
 
+# The interaction Hamiltonians return TRIQS many-body operators, whose wrapped type is registered by this
+# module; without it the conversion back to Python fails.
+import triqs.operators.operators
+
 from .atomic_levels_and_delta import *
 from .embedding import *
 from .hamiltonians import *
