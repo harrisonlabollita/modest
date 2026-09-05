@@ -97,9 +97,16 @@ To describe local interactions, ModEST provides tools to construct standard inte
 * @ref triqs::make_slater -- full rotationally invariant Slater Hamiltonian.
 * @ref triqs::make_density_density -- density-density only Hamiltonian.
 
-All built using TRIQS many-body operators.
+All built using TRIQS many-body operators, for one impurity of an embedding.
 
 This design makes it easier to swap and test different double counting schemes.
+
+The Slater Hamiltonian takes a four-index Coulomb tensor, built for an atomic shell and then restricted to the
+orbitals of the correlated space:
+
+* @ref triqs::slater_tensor -- the \f$ (2l+1)^4 \f$ tensor of a shell, with \f$ l \f$ and the spherical-to-DFT
+  rotation read from the local space.
+* @ref triqs::to_local_basis -- restrict it to the correlated orbitals and rotate to the local basis.
 
 
 ## Post-processing
