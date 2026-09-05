@@ -35,22 +35,15 @@ namespace triqs::modest::dft_tools::wien2k {
       Ylm(3, 3) = -1.0 / sqrt2;
       Ylm(4, 3) = 1.0 / sqrt2;
     }
-    // l = 3: "x(x^2-3y^2)","z(x^2-y^2)","xz^2","z^3","yz^2","xyz","y(3x^2-y^2)"
+    // There is no single Y_lm -> Wien2k rotation for an f shell: dmftproj builds a point-group-specific
+    // transformation per site (see dmftproj/SRC_templates/case.cf_f_mm2). Returning a generic matrix here would
+    // silently give the wrong Coulomb tensor, so refuse instead. TRIQS' spherical_to_cubic does the same.
     else if (l == 3) {
-      Ylm(0, 0) = 1.0 / sqrt2;
-      Ylm(1, 1) = 1.0 / sqrt2;
-      Ylm(2, 2) = 1.0 / sqrt2;
-      Ylm(0, 6) = 1.0 / sqrt2;
-      Ylm(1, 5) = 1.0 / sqrt2;
-      Ylm(2, 4) = 1.0 / sqrt2;
-      Ylm(3, 3) = 1.0;
-      Ylm(4, 2) = I / sqrt2;
-      Ylm(5, 1) = I / sqrt2;
-      Ylm(6, 0) = I / sqrt2;
-      Ylm(4, 4) = I / sqrt2;
-      Ylm(5, 5) = -I / sqrt2;
-      Ylm(6, 6) = I / sqrt2;
-    }
+      throw std::runtime_error(
+         "[wien2k::get_spherical_to_dft_rotation] No Wien2k f-shell (l=3) rotation: dmftproj uses point-group-specific "
+         "transformations per site (see dmftproj/SRC_templates/case.cf_f_mm2). Pass the rotation explicitly.");
+    } else
+      throw std::runtime_error(fmt::format("[wien2k::get_spherical_to_dft_rotation] No implementation for l = {}.", l));
     return Ylm;
   }
 } // namespace triqs::modest::dft_tools::wien2k

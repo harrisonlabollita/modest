@@ -81,16 +81,26 @@ TEST(hamiltonian_tests, spherical_umatrix_slater_construction) {
   }
 }
 
-TEST(hamiltonian_tests, wien2k_umatrix_slater_construction) {
-  // auto spherical_to_cubic_conventions = {"wien2k", "qe", "vasp", "wannier90"};
+TEST(hamiltonian_tests, umatrix_slater_construction_all_dft_conventions) {
+  // Reference tensors come from TRIQS' spherical_to_cubic(l, convention) -- see ref_data/umatrix.py.
   auto root   = h5::proxy{"ref_data/u_matrix_slater.ref.h5", 'r'};
   auto U_int  = as<double>(root["U_int"]);
   auto J_hund = as<double>(root["J_hund"]);
-  auto ls     = std::vector<long>{1, 2};
-  for (auto l : ls) {
-    auto Umat_ref = as<nda::array<dcomplex, 4>>(root[std::to_string(l)]["wien2k"]);
-    auto T        = dft_tools::wien2k::get_spherical_to_dft_rotation(l);
-    auto Umat     = U_matrix_slater_local(l, T, U_int, J_hund);
-    EXPECT_ARRAY_NEAR(Umat, Umat_ref, 1e-14);
+
+  auto conventions = std::vector<std::pair<std::string, DFTCode>>{
+     {"wien2k", DFTCode::Wien2k}, {"vasp", DFTCode::VASP}, {"qe", DFTCode::QuantumEspresso}, {"wannier90", DFTCode::W90}};
+
+  for (auto l : std::vector<long>{1, 2, 3}) {
+    for (auto const &[name, code] : conventions) {
+      // Wien2k has no generic f-shell rotation; it must refuse rather than return a wrong one.
+      if (l == 3 and code == DFTCode::Wien2k) {
+        EXPECT_THROW(dft_tools::get_spherical_to_dft_rotation(code, l), std::runtime_error);
+        continue;
+      }
+      auto Umat_ref = as<nda::array<dcomplex, 4>>(root[std::to_string(l)][name]);
+      auto T        = dft_tools::get_spherical_to_dft_rotation(code, l);
+      auto Umat     = U_matrix_slater_local(l, T, U_int, J_hund);
+      EXPECT_ARRAY_NEAR(Umat, Umat_ref, 1e-14) << "l = " << l << ", convention = " << name;
+    }
   }
 }

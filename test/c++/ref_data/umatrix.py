@@ -6,7 +6,7 @@ spherical_to_cubic_conventions = ['wien2k', 'qe', 'vasp', 'wannier90']
 U_int  = 10.0
 J_hund = 1.0
 
-with HDFArchive("u_matrix_slater.ref.h5", "a") as ar:
+with HDFArchive("u_matrix_slater.ref.h5", "w") as ar:
     ar.create_group('triqs-details')
     ar['triqs-details']['version'] = version.version
     ar['triqs-details']['git_hash'] = version.git_hash
@@ -15,7 +15,9 @@ with HDFArchive("u_matrix_slater.ref.h5", "a") as ar:
     for l in [1,2,3]:
         ar.create_group(str(l))
         ar[str(l)]['spherical'] = U_matrix_slater(l, U_int=U_int, J_hund=J_hund, basis='spherical')
-    for l in [1,2]:
+    for l in [1,2,3]:
         for convention in spherical_to_cubic_conventions:
+            # TRIQS has no wien2k f-shell transformation: dmftproj uses point-group-specific ones.
+            if l == 3 and convention == 'wien2k': continue
             T = spherical_to_cubic(l, convention=convention)
             ar[str(l)][convention] = U_matrix_slater(l, U_int=U_int, J_hund=J_hund, basis='other', T=T)

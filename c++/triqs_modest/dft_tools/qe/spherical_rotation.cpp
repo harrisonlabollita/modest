@@ -26,32 +26,33 @@ namespace triqs::modest::dft_tools::qe {
     }
     // l = 2: "z^2", "xz", "yz", "x^2-y^2", "xy"
     else if (l == 2) {
-      Ylm(0, 0) = I / sqrt2;
-      Ylm(1, 1) = I / sqrt2;
-      Ylm(2, 2) = 1.0;
-      Ylm(3, 1) = 1 / sqrt2;
-      Ylm(4, 1) = 1 / sqrt2;
-      Ylm(0, 4) = -I / sqrt2;
-      Ylm(1, 3) = I / sqrt2;
-      Ylm(3, 3) = -1.0 / sqrt2;
-      Ylm(4, 4) = 1.0 / sqrt2;
-    }
-    // l = 3: "x(x^2-3y^2)","z(x^2-y^2)","xz^2","z^3","yz^2","xyz","y(3x^2-y^2)"
-    else if (l == 3) {
-      Ylm(0, 0) = 1.0 / sqrt2;
+      Ylm(0, 2) = 1.0;
       Ylm(1, 1) = 1.0 / sqrt2;
-      Ylm(2, 2) = 1.0 / sqrt2;
-      Ylm(0, 6) = 1.0 / sqrt2;
-      Ylm(1, 5) = 1.0 / sqrt2;
-      Ylm(2, 4) = 1.0 / sqrt2;
-      Ylm(3, 3) = 1.0;
-      Ylm(4, 2) = I / sqrt2;
-      Ylm(5, 1) = I / sqrt2;
-      Ylm(6, 0) = I / sqrt2;
-      Ylm(4, 4) = I / sqrt2;
-      Ylm(5, 5) = -I / sqrt2;
-      Ylm(6, 6) = I / sqrt2;
+      Ylm(1, 3) = -1.0 / sqrt2;
+      Ylm(2, 1) = I / sqrt2;
+      Ylm(2, 3) = I / sqrt2;
+      Ylm(3, 0) = 1.0 / sqrt2;
+      Ylm(3, 4) = 1.0 / sqrt2;
+      Ylm(4, 0) = I / sqrt2;
+      Ylm(4, 4) = -I / sqrt2;
     }
+    // l = 3: "z^3","xz^2","yz^2","z(x^2-y^2)","xyz","x(x^2-3y^2)","y(3x^2-y^2)"
+    else if (l == 3) {
+      Ylm(0, 3) = 1.0;
+      Ylm(1, 2) = 1.0 / sqrt2;
+      Ylm(1, 4) = -1.0 / sqrt2;
+      Ylm(2, 2) = I / sqrt2;
+      Ylm(2, 4) = I / sqrt2;
+      Ylm(3, 1) = 1.0 / sqrt2;
+      Ylm(3, 5) = 1.0 / sqrt2;
+      Ylm(4, 1) = I / sqrt2;
+      Ylm(4, 5) = -I / sqrt2;
+      Ylm(5, 0) = 1.0 / sqrt2;
+      Ylm(5, 6) = -1.0 / sqrt2;
+      Ylm(6, 0) = I / sqrt2;
+      Ylm(6, 6) = I / sqrt2;
+    } else
+      throw std::runtime_error(fmt::format("[qe::get_spherical_to_dft_rotation] No implementation for l = {}.", l));
     return Ylm;
   }
 } // namespace triqs::modest::dft_tools::qe

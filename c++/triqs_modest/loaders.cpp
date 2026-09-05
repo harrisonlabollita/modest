@@ -203,7 +203,15 @@ namespace triqs::modest {
     //TODO: finish this!
     auto code = dft_tools::dft_code_to_enum(dft);
     auto Ylms = nda::array<nda::matrix<dcomplex>, 1>(atomic_shells.size());
-    for (auto const &[iatom, atom] : enumerate(atomic_shells)) { Ylms(iatom) = dft_tools::get_spherical_to_dft_rotation(code, atom.l); }
+    for (auto const &[iatom, atom] : enumerate(atomic_shells)) {
+      // Not every (code, l) pair defines a rotation (e.g. Wien2k f shells); the per-code functions report that as
+      // a runtime_error, and it only matters if a Slater Coulomb tensor is later built on this shell, so leave
+      // the entry empty rather than failing the load. A dft_code with no rotations at all is a different matter:
+      // the dispatcher raises logic_error for that, and it propagates.
+      try {
+        Ylms(iatom) = dft_tools::get_spherical_to_dft_rotation(code, atom.l);
+      } catch (std::runtime_error const &) { Ylms(iatom) = nda::matrix<dcomplex>{}; }
+    }
     return Ylms;
   }
 
