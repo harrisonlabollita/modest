@@ -68,6 +68,12 @@ TEST(hamiltonian_test, kanamori_from_embedding) {
   EXPECT_TRUE((h_int1 - h_int2).is_zero());
 }
 
+TEST(hamiltonian_tests, radial_integrals_reject_unsupported_l) {
+  // l = 0 and l > 3 used to return an all-zero tensor rather than complaining.
+  EXPECT_THROW(U_matrix_slater_spherical(0, 3.0, 0.5), std::runtime_error);
+  EXPECT_THROW(U_matrix_slater_spherical(4, 3.0, 0.5), std::runtime_error);
+}
+
 TEST(hamiltonian_tests, spherical_umatrix_slater_construction) {
   // auto spherical_to_cubic_conventions = {"wien2k", "qe", "vasp", "wannier90"};
   auto root   = h5::proxy{"ref_data/u_matrix_slater.ref.h5", 'r'};

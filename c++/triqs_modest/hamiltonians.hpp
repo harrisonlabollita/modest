@@ -59,6 +59,23 @@ namespace triqs {
    */
   nda::array<dcomplex, 4> U_matrix_slater_local(long l, nda::matrix<dcomplex> s2l, double U_int, double J_hund);
 
+  /**
+   * @ingroup hamiltonian
+   * @brief Rotate a four-index Coulomb tensor into a new orbital basis.
+   *
+   * @details `M` transforms the orbitals, \f$ |i\rangle_{\mathrm{new}} = \sum_{j} M_{ij}|j\rangle_{\mathrm{old}} \f$,
+   * so the operators pick up the conjugate, \f$ c^{\mathrm{new}}_{i} = \sum_{j} M^{*}_{ij}c^{\mathrm{old}}_{j} \f$,
+   * and the Coulomb tensor transforms as
+   * \f[
+   *   U'_{iknp} = \sum_{jqmo} M^{*}_{ij} M^{*}_{kq} U_{jqmo} M_{nm} M_{po}.
+   * \f]
+   *
+   * @param U_tensor Coulomb tensor in the old basis.
+   * @param M Orbital change-of-basis matrix (new \f$ \leftarrow \f$ old).
+   * @return Coulomb tensor in the new basis.
+   */
+  nda::array<dcomplex, 4> rotate_U_matrix_slater(nda::array<dcomplex, 4> const &U_tensor, nda::matrix<dcomplex> M);
+
   ///@}
 
   /** @name Hamiltonians
@@ -75,13 +92,13 @@ namespace triqs {
     bool pair_hopping = true;
   };
 
-  operators::many_body_operator h_int_kanamori(nda::matrix<double> const &U, nda::matrix<double> const &Uprime, double const &J_hund,
-                                               int const &n_orb, std::vector<std::string> const &spin_names, kanamori_params const &params = {});
+  operators::many_body_operator h_int_kanamori(nda::matrix<double> const &U, nda::matrix<double> const &Uprime, double J_hund, long n_orb,
+                                               std::vector<std::string> const &spin_names, kanamori_params const &params = {});
 
-  operators::many_body_operator h_int_density(nda::matrix<double> const &U, nda::matrix<double> const &Uprime, double const &J_hund, int const &n_orb,
+  operators::many_body_operator h_int_density(nda::matrix<double> const &U, nda::matrix<double> const &Uprime, double J_hund, long n_orb,
                                               std::vector<std::string> const &spin_names);
 
-  operators::many_body_operator h_int_slater(nda::array<dcomplex, 4> const &U, int const &n_orb, std::vector<std::string> const &spin_names);
+  operators::many_body_operator h_int_slater(nda::array<dcomplex, 4> const &U, long n_orb, std::vector<std::string> const &spin_names);
 
   /**
    * @ingroup hamiltonian

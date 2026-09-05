@@ -54,6 +54,9 @@ namespace triqs {
     }
 
     nda::array<double, 1> radial_integrals(long l, double U_int, double J_hund) {
+      if (l < 1 or l > 3)
+        throw std::runtime_error(
+           fmt::format("[radial_integrals] Slater integrals are only implemented for l = 1, 2, 3, but l = {} was requested.", l));
       auto F = nda::zeros<double>(l + 1);
       if (l == 1) {
         F(0) = U_int;
@@ -128,26 +131,29 @@ namespace triqs {
     return U_matrix;
   }
 
-  nda::array<dcomplex, 4> rotate_U_matrix_slater(nda::array<double, 4> const &Uspherical, nda::matrix<dcomplex> sph_to_local) {
-    auto s2lC    = conj(sph_to_local);
-    auto s2lT    = transpose(sph_to_local);
-    auto N       = Uspherical.extent(0);
+  nda::array<dcomplex, 4> rotate_U_matrix_slater(nda::array<dcomplex, 4> const &U_tensor, nda::matrix<dcomplex> M) {
+    auto N = U_tensor.extent(0);
+    if (M.extent(0) != N or M.extent(1) != N)
+      throw std::runtime_error(
+         fmt::format("[rotate_U_matrix_slater] Rotation matrix is {}x{} but the Coulomb tensor has extent {}.", M.extent(0), M.extent(1), N));
+    auto s2lC    = conj(M);
+    auto s2lT    = transpose(M);
     auto U_local = nda::zeros<dcomplex>(N, N, N, N);
     for (auto [i, k, n, p, j, q, m, o] : product(range(N), range(N), range(N), range(N), range(N), range(N), range(N), range(N))) {
       auto left  = s2lC(i, j) * s2lC(k, q);
       auto right = (s2lT(m, n)) * s2lT(o, p);
-      U_local(i, k, n, p) += left * Uspherical(j, q, m, o) * right;
+      U_local(i, k, n, p) += left * U_tensor(j, q, m, o) * right;
     }
     return U_local;
   }
 
   nda::array<dcomplex, 4> U_matrix_slater_local(long l, nda::matrix<dcomplex> sph_to_local, double U_int, double J_hund) {
-    auto Uspherical = U_matrix_slater_spherical(l, U_int, J_hund); // construct U in spherical basis
-    return rotate_U_matrix_slater(Uspherical, sph_to_local);       // rotate spherical U to local basis
+    auto Uspherical = U_matrix_slater_spherical(l, U_int, J_hund);                    // construct U in spherical basis
+    return rotate_U_matrix_slater(nda::array<dcomplex, 4>{Uspherical}, sph_to_local); // rotate spherical U to local basis
   }
 
-  operators::many_body_operator h_int_kanamori(nda::matrix<double> const &Umat, nda::matrix<double> const &Upmat, double const &J_hund,
-                                               int const &n_orb, std::vector<std::string> const &spin_names, kanamori_params const &params) {
+  operators::many_body_operator h_int_kanamori(nda::matrix<double> const &Umat, nda::matrix<double> const &Upmat, double J_hund, long n_orb,
+                                               std::vector<std::string> const &spin_names, kanamori_params const &params) {
 
     auto h_int = operators::many_body_operator();
 
@@ -184,20 +190,28 @@ namespace triqs {
     return h_int;
   }
 
-  operators::many_body_operator h_int_density(nda::matrix<double> const &Umat, nda::matrix<double> const &Upmat, double const &J_hund,
-                                              int const &n_orb, std::vector<std::string> const &spin_names) {
+  operators::many_body_operator h_int_density(nda::matrix<double> const &Umat, nda::matrix<double> const &Upmat, double J_hund, long n_orb,
+                                              std::vector<std::string> const &spin_names) {
     kanamori_params params{.spin_flip = false, .pair_hopping = false};
     return h_int_kanamori(Umat, Upmat, J_hund, n_orb, spin_names, params);
   }
 
   // ----------------------------------------------------
 
-  operators::many_body_operator h_int_slater(nda::array<dcomplex, 4> const &Umatrix, int const &n_orb, std::vector<std::string> const &spin_names) {
-    auto h_int = operators::many_body_operator();
+  operators::many_body_operator h_int_slater(nda::array<dcomplex, 4> const &Umatrix, long n_orb, std::vector<std::string> const &spin_names) {
+    // A complex local basis may leave an imaginary part in the tensor, or may not -- a global phase, for one,
+    // cancels -- and the Hamiltonian is Hermitian either way. many_body_operator holds real_or_complex
+    // coefficients, but one built from a complex stays complex for good, so only go complex when Im U is there.
+    bool is_complex = max_element(abs(imag(Umatrix))) > 1e-12;
+    auto h_int      = operators::many_body_operator();
     for (auto &&[s1, s2] : itertools::product(spin_names, spin_names)) {
       for (auto [m1, m2, m3, m4] : product(range(n_orb), range(n_orb), range(n_orb), range(n_orb))) {
-        h_int += 0.5 * real(Umatrix(m1, m2, m3, m4)) * detail::c_dag(std::make_pair(s1, m1)) * detail::c_dag(std::make_pair(s2, m2))
-           * detail::c(std::make_pair(s2, m4)) * detail::c(std::make_pair(s1, m3));
+        auto op = detail::c_dag(std::make_pair(s1, m1)) * detail::c_dag(std::make_pair(s2, m2)) * detail::c(std::make_pair(s2, m4))
+           * detail::c(std::make_pair(s1, m3));
+        if (is_complex)
+          h_int += 0.5 * Umatrix(m1, m2, m3, m4) * op;
+        else
+          h_int += 0.5 * real(Umatrix(m1, m2, m3, m4)) * op;
       }
     }
     return h_int;
