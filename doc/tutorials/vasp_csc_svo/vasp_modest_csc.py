@@ -63,8 +63,8 @@ mpi.report(obe)
 # Build the embedding (correlated subspace) from the projector space.
 E = M.make_embedding(obe.C_space); mpi.report(E.description(True))
 
-# Local Kanamori interaction Hamiltonian on the impurity.
-h_int = M.make_kanamori(E.sigma_names, E.imp_decomposition(0), U, Up, J, False, False)
+# Local density-density interaction Hamiltonian on impurity 0.
+h_int = M.make_density_density(E, 0, U, Up, J)
 
 # Double-counting correction (Held's fully-localized-limit flavour).
 DcTerm = M.DcSolver("NonPolarized", "cHeld", U, J)

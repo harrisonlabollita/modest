@@ -8,6 +8,7 @@
 #include <triqs/operators.hpp>
 #include <triqs/operators/many_body_operator.hpp>
 #include "./local_space.hpp"
+#include "./embedding.hpp"
 
 using namespace triqs::gfs;
 
@@ -157,7 +158,7 @@ namespace triqs {
 
   /**
    * @ingroup hamiltonian
-   * @brief Construct a density-density interaction Hamiltonian.
+   * @brief Construct a density-density interaction Hamiltonian for one impurity.
    *
    * @details Create a density-density Hamiltonian
    * \f[
@@ -165,19 +166,20 @@ namespace triqs {
    *   n_{j\sigma^{\prime}}.
    * \f]
    *
-   * @param tau_names Names of tau indices ['up', 'down'].
-   * @param dim_gamma Dimension of the blocks \f$ \gamma \f$.
+   * Equivalent to @ref triqs::make_kanamori with the spin-flip and pair-hopping terms switched off.
+   *
+   * @param E The embedding.
+   * @param imp_idx Index of the impurity.
    * @param U_int Hubbard \f$ U \f$.
    * @param U_prime \f$ U' \f$ (typically \f$ U' = U - 2J \f$).
    * @param J_hund Kanamori \f$ J \f$.
    * @return Many-body operator representing the Hamiltonian.
    */
-  operators::many_body_operator make_density_density(std::vector<std::string> const &tau_names, std::vector<long> const &dim_gamma, double U_int,
-                                                     double U_prime, double J_hund);
+  operators::many_body_operator make_density_density(modest::embedding const &E, long imp_idx, double U_int, double U_prime, double J_hund);
 
   /**
    * @ingroup hamiltonian
-   * @brief Construct a Hubbard-Kanamori Hamiltonian.
+   * @brief Construct a Hubbard-Kanamori Hamiltonian for one impurity.
    *
    * @details Create a Hubbard-Kanamori Hamiltonian using the density-density, spin-flip, and pair-hopping interactions,
    * \f[
@@ -186,8 +188,10 @@ namespace triqs {
    *   c_{j\uparrow} + \sum_{i\neq j} J c_{i\uparrow}^{\dagger}c_{i\downarrow}^{\dagger}c_{j\downarrow}c_{j\uparrow}.
    * \f]
    *
-   * @param tau_names Names of tau indices ['up', 'down'].
-   * @param dim_gamma Dimension of the blocks \f$ \gamma \f$.
+   * The operator names follow the block structure of impurity `imp_idx`, i.e. `(tau_gamma, orbital)`.
+   *
+   * @param E The embedding.
+   * @param imp_idx Index of the impurity.
    * @param U_int  Hubbard \f$ U \f$.
    * @param U_prime \f$ U' \f$ (typically \f$ U' = U - 2J \f$).
    * @param J_hund Kanamori \f$ J \f$.
@@ -195,11 +199,12 @@ namespace triqs {
    * @param pair_hopping Pair-hopping term.
    * @return Many-body operator representing the Hamiltonian.
    */
-  operators::many_body_operator make_kanamori(std::vector<std::string> const &tau_names, std::vector<long> const &dim_gamma, double U_int,
-                                              double U_prime, double J_hund, bool spin_flip = true, bool pair_hopping = true);
+  operators::many_body_operator make_kanamori(modest::embedding const &E, long imp_idx, double U_int, double U_prime, double J_hund,
+                                              bool spin_flip = true, bool pair_hopping = true);
+
   /**
    * @ingroup hamiltonian
-   * @brief Construct a Slater Hamiltonian.
+   * @brief Construct a Slater Hamiltonian for one impurity from a Coulomb tensor.
    *
    * @details Create a Slater Hamiltonian using fully rotationally-invariant four-index interactions:
    * \f[
@@ -207,16 +212,23 @@ namespace triqs {
    *   c^{\dagger}_{j\sigma^{\prime}}c_{l\sigma^{\prime}}c_{k\sigma}.
    * \f]
    *
-   * @param tau_names Names of tau indices ['up', 'down'].
-   * @param dim_gamma Dimension of the blocks \f$ \gamma \f$.
-   * @param U_int  Hubbard \f$ U \f$.
-   * @param J_hund Hund's \f$ J \f$.
-   * @param spherical_to_dft Rotation matrices from spherical \f$ Y_l^m \f$ basis to DFT orbital basis.
-   * @param dft_to_local Rotation matrices from DFT basis to the local impurity basis.
+   * `U_tensor` may be given at either of two sizes:
+   *
+   * * sized for impurity `imp_idx` itself, the usual case when the impurity is a whole atomic shell;
+   * * sized for the whole correlated space \f$ \mathcal{C} \f$, in which case this impurity's block is cut out
+   *   through the embedding. This is what @ref triqs::to_local_basis returns when the impurity is a part of
+   *   \f$ \mathcal{C} \f$ split off with `split_imp`, e.g. a t2g impurity from a full d shell. It requires the
+   *   impurity's orbitals to form one contiguous block of \f$ \mathcal{C} \f$; if they do not, restrict the
+   *   tensor yourself and pass the impurity-sized one.
+   *
+   * @param E The embedding.
+   * @param imp_idx Index of the impurity.
+   * @param U_tensor Coulomb tensor in the local basis, of shape \f$ n_{\mathrm{orb}}^4 \f$ or
+   * \f$ \mathrm{dim}(\mathcal{C})^4 \f$, e.g. built with @ref triqs::slater_tensor followed by
+   * @ref triqs::to_local_basis.
+   * @return Many-body operator representing the Hamiltonian.
    */
-  operators::many_body_operator make_slater(std::vector<std::string> const &tau_names, std::vector<long> const &dim_gamma, double U_int,
-                                            double J_hund, nda::matrix<dcomplex> const &spherical_to_dft,
-                                            std::optional<nda::matrix<dcomplex>> const &dft_to_local);
+  operators::many_body_operator make_slater(modest::embedding const &E, long imp_idx, nda::array<dcomplex, 4> const &U_tensor);
   ///@}
 
 } // namespace triqs

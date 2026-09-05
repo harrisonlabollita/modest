@@ -63,7 +63,7 @@ TEST(hamiltonian_test, kanamori_from_embedding) {
   std::string filename = "ref_data/svo-wien2k.ref.h5";
   auto [_, obe]        = one_body_elements_from_dft_converter(filename, 1.e-3);
   auto E               = make_embedding(obe.C_space);
-  auto h_int2          = make_kanamori(E.sigma_names(), E.imp_decomposition(0), 3.0, 2.0, 0.5);
+  auto h_int2          = make_kanamori(E, 0, 3.0, 2.0, 0.5);
 
   EXPECT_TRUE((h_int1 - h_int2).is_zero());
 }
@@ -136,6 +136,36 @@ TEST(hamiltonian_tests, slater_tensor_full_shell_for_several_l) {
     EXPECT_NEAR(U_avg, 3.0, 1e-12);
     EXPECT_NEAR(J_avg, 0.5, 1e-12);
   }
+}
+
+TEST(hamiltonian_tests, make_slater_slices_impurity_out_of_the_C_space) {
+  // SrVO3 with the full d shell in C. Split it into a t2g and an eg impurity: passing the C-space tensor must
+  // give the same operator as slicing the t2g block out of it by hand.
+  auto [_, obe] = one_body_elements_from_dft_converter("ref_data/SrVO3-cubic-t2g-eg.ref.h5", 1.e-3);
+  auto const &C = obe.C_space;
+  auto U_C      = to_local_basis(slater_tensor(C, 0, 3.0, 0.5), C, 0); // whole shell, no selection needed
+  EXPECT_EQ(U_C.extent(0), 5);
+
+  auto E = make_embedding(C).split_imp(0, std::vector<long>{0, 1, 2}); // imp 0 = t2g, imp 1 = eg
+  ASSERT_EQ(E.n_impurities(), 2);
+
+  auto h_from_C   = make_slater(E, 0, U_C);
+  auto U_imp      = nda::array<dcomplex, 4>{U_C(range(3), range(3), range(3), range(3))};
+  auto h_from_imp = make_slater(E, 0, U_imp);
+  EXPECT_TRUE((h_from_C - h_from_imp).is_zero());
+
+  // a tensor sized for neither the impurity nor C is rejected, as is an out-of-range impurity index
+  EXPECT_THROW(make_slater(E, 0, nda::zeros<dcomplex>(4, 4, 4, 4)), std::runtime_error);
+  EXPECT_THROW(make_slater(E, 7, U_C), std::runtime_error);
+
+  // an impurity whose orbitals are not contiguous in C cannot be cut out of a C-sized tensor, but the
+  // impurity-sized tensor still works
+  auto E_nc = make_embedding(C).split_imp(0, std::vector<long>{0, 1, 3});
+  EXPECT_THROW(make_slater(E_nc, 0, U_C), std::runtime_error);
+  auto sel   = std::vector<long>{0, 1, 3};
+  auto U_sel = nda::zeros<dcomplex>(3, 3, 3, 3);
+  for (auto [i, j, k, m] : product(range(3), range(3), range(3), range(3))) U_sel(i, j, k, m) = U_C(sel[i], sel[j], sel[k], sel[m]);
+  EXPECT_NO_THROW(make_slater(E_nc, 0, U_sel));
 }
 
 TEST(hamiltonian_tests, radial_integrals_reject_unsupported_l) {

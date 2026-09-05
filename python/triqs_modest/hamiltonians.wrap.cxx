@@ -26,29 +26,25 @@ using c2py::operator""_a;
 
 // make_density_density
 static auto const _c2py_fun_0 =
-   c2py::dispatcher_f_kw_t{c2py::cfun([](const std::vector<std::string> &tau_names, const std::vector<long> &dim_gamma, double U_int, double U_prime,
-                                         double J_hund) { return triqs::make_density_density(tau_names, dim_gamma, U_int, U_prime, J_hund); },
-                                      "tau_names", "dim_gamma", "U_int", "U_prime", "J_hund")};
+   c2py::dispatcher_f_kw_t{c2py::cfun([](const triqs::modest::embedding &E, long imp_idx, double U_int, double U_prime,
+                                         double J_hund) { return triqs::make_density_density(E, imp_idx, U_int, U_prime, J_hund); },
+                                      "E", "imp_idx", "U_int", "U_prime", "J_hund")};
 
 // make_kanamori
-static auto const _c2py_fun_1 = c2py::dispatcher_f_kw_t{c2py::cfun(
-   [](const std::vector<std::string> &tau_names, const std::vector<long> &dim_gamma, double U_int, double U_prime, double J_hund, bool spin_flip,
-      bool pair_hopping) { return triqs::make_kanamori(tau_names, dim_gamma, U_int, U_prime, J_hund, spin_flip, pair_hopping); },
-   "tau_names", "dim_gamma", "U_int", "U_prime", "J_hund", "spin_flip"_a = true, "pair_hopping"_a = true)};
+static auto const _c2py_fun_1 = c2py::dispatcher_f_kw_t{
+   c2py::cfun([](const triqs::modest::embedding &E, long imp_idx, double U_int, double U_prime, double J_hund, bool spin_flip,
+                 bool pair_hopping) { return triqs::make_kanamori(E, imp_idx, U_int, U_prime, J_hund, spin_flip, pair_hopping); },
+              "E", "imp_idx", "U_int", "U_prime", "J_hund", "spin_flip"_a = true, "pair_hopping"_a = true)};
 
 // make_slater
 static auto const _c2py_fun_2 = c2py::dispatcher_f_kw_t{c2py::cfun(
-   [](const std::vector<std::string> &tau_names, const std::vector<long> &dim_gamma, double U_int, double J_hund,
-      const nda::basic_array<std::complex<double>, 2, nda::C_layout, 'M', nda::heap_basic<nda::mem::mallocator<nda::mem::AddressSpace::Host>>>
-         &spherical_to_dft,
-      const std::optional<nda::basic_array<std::complex<double>, 2, nda::C_layout, 'M',
-                                           nda::heap_basic<nda::mem::mallocator<nda::mem::AddressSpace::Host>>>> &dft_to_local) {
-     return triqs::make_slater(tau_names, dim_gamma, U_int, J_hund, spherical_to_dft, dft_to_local);
-   },
-   "tau_names", "dim_gamma", "U_int", "J_hund", "spherical_to_dft", "dft_to_local")};
+   [](const triqs::modest::embedding &E, long imp_idx,
+      const nda::basic_array<std::complex<double>, 4, nda::C_layout, 'A', nda::heap_basic<nda::mem::mallocator<nda::mem::AddressSpace::Host>>>
+         &U_tensor) { return triqs::make_slater(E, imp_idx, U_tensor); },
+   "E", "imp_idx", "U_tensor")};
 
 static const auto _c2py_doc_0 = _c2py_fun_0.doc(R"DOC(
-Construct a density-density interaction Hamiltonian.
+Construct a density-density interaction Hamiltonian for one impurity.
 
 Create a density-density Hamiltonian
 
@@ -57,12 +53,14 @@ Create a density-density Hamiltonian
    H_{\mathrm{int}} = \frac{1}{2} \sum_{(i\sigma)\neq(j\sigma^{\prime})} U_{ij}^{\sigma\sigma^{\prime}}n_{i\sigma}
    n_{j\sigma^{\prime}}.
 
+Equivalent to ``triqs::make_kanamori`` with the spin-flip and pair-hopping terms switched off.
+
 Parameters
 ----------
-tau_names : {par_0}
-   Names of tau indices ['up', 'down'].
-dim_gamma : {par_1}
-   Dimension of the blocks :math:`\gamma`.
+E : {par_0}
+   The embedding.
+imp_idx : {par_1}
+   Index of the impurity.
 U_int : {par_2}
    Hubbard :math:`U`.
 U_prime : {par_3}
@@ -75,14 +73,14 @@ Returns
 {ret_0}
    Many-body operator representing the Hamiltonian.
 )DOC",
-                                                {{c2py::python_typename<const std::vector<std::string> &>()},
-                                                 {c2py::python_typename<const std::vector<long> &>()},
+                                                {{c2py::python_typename<const triqs::modest::embedding &>()},
+                                                 {c2py::python_typename<long>()},
                                                  {c2py::python_typename<double>()},
                                                  {c2py::python_typename<double>()},
                                                  {c2py::python_typename<double>()}},
                                                 {c2py::python_typename<triqs::operators::many_body_operator>()});
 static const auto _c2py_doc_1 = _c2py_fun_1.doc(R"DOC(
-Construct a Hubbard-Kanamori Hamiltonian.
+Construct a Hubbard-Kanamori Hamiltonian for one impurity.
 
 Create a Hubbard-Kanamori Hamiltonian using the density-density, spin-flip, and pair-hopping interactions,
 
@@ -92,12 +90,14 @@ Create a Hubbard-Kanamori Hamiltonian using the density-density, spin-flip, and 
    n_{j\sigma^{\prime}} - \sum_{i\neq j}Jc_{i\uparrow}^{\dagger}c_{i\downarrow}c_{j\downarrow}^{\dagger}
    c_{j\uparrow} + \sum_{i\neq j} J c_{i\uparrow}^{\dagger}c_{i\downarrow}^{\dagger}c_{j\downarrow}c_{j\uparrow}.
 
+The operator names follow the block structure of impurity `imp_idx`, i.e. `(tau_gamma, orbital)`.
+
 Parameters
 ----------
-tau_names : {par_0}
-   Names of tau indices ['up', 'down'].
-dim_gamma : {par_1}
-   Dimension of the blocks :math:`\gamma`.
+E : {par_0}
+   The embedding.
+imp_idx : {par_1}
+   Index of the impurity.
 U_int : {par_2}
    Hubbard :math:`U`.
 U_prime : {par_3}
@@ -114,17 +114,17 @@ Returns
 {ret_0}
    Many-body operator representing the Hamiltonian.
 )DOC",
-                                                {{c2py::python_typename<const std::vector<std::string> &>()},
-                                                 {c2py::python_typename<const std::vector<long> &>()},
+                                                {{c2py::python_typename<const triqs::modest::embedding &>()},
+                                                 {c2py::python_typename<long>()},
                                                  {c2py::python_typename<double>()},
                                                  {c2py::python_typename<double>()},
                                                  {c2py::python_typename<double>()},
                                                  {c2py::python_typename<bool>()},
                                                  {c2py::python_typename<bool>()}},
                                                 {c2py::python_typename<triqs::operators::many_body_operator>()});
-static const auto _c2py_doc_2 = _c2py_fun_2.doc(
-   R"DOC(
-Construct a Slater Hamiltonian.
+static const auto _c2py_doc_2 =
+   _c2py_fun_2.doc(R"DOC(
+Construct a Slater Hamiltonian for one impurity from a Coulomb tensor.
 
 Create a Slater Hamiltonian using fully rotationally-invariant four-index interactions:
 
@@ -133,29 +133,35 @@ Create a Slater Hamiltonian using fully rotationally-invariant four-index intera
    H_{\mathrm{int}} = \frac{1}{2} \sum_{ijkl, \sigma\sigma^{\prime}} U_{ijkl}c^{\dagger}_{i\sigma}
    c^{\dagger}_{j\sigma^{\prime}}c_{l\sigma^{\prime}}c_{k\sigma}.
 
+`U_tensor` may be given at either of two sizes:
+
+* sized for impurity `imp_idx` itself, which is the on-site tensor of a single atom and the usual case for a
+  correlated space spanning several atoms;
+* sized for the whole correlated space :math:`\mathcal{C}`, in which case this impurity's block is cut out
+  through the embedding. Use this when an impurity covers only part of :math:`\mathcal{C}`, e.g. a t2g
+  impurity split off a full d shell.
+
 Parameters
 ----------
-tau_names : {par_0}
-   Names of tau indices ['up', 'down'].
-dim_gamma : {par_1}
-   Dimension of the blocks :math:`\gamma`.
-U_int : {par_2}
-   Hubbard :math:`U`.
-J_hund : {par_3}
-   Hund's :math:`J`.
-spherical_to_dft : {par_4}
-   Rotation matrices from spherical :math:`Y_l^m` basis to DFT orbital basis.
-dft_to_local : {par_5}
-   Rotation matrices from DFT basis to the local impurity basis.
+E : {par_0}
+   The embedding.
+imp_idx : {par_1}
+   Index of the impurity.
+U_tensor : {par_2}
+   Coulomb tensor in the local basis, of shape :math:`n_{\mathrm{orb}}^4` or
+   :math:`\mathrm{dim}(\mathcal{C})^4`, e.g. built with ``triqs::slater_tensor`` followed by
+   ``triqs::to_local_basis.``
+
+Returns
+-------
+{ret_0}
+   Many-body operator representing the Hamiltonian.
 )DOC",
-   {{c2py::python_typename<const std::vector<std::string> &>()},
-    {c2py::python_typename<const std::vector<long> &>()},
-    {c2py::python_typename<double>()},
-    {c2py::python_typename<double>()},
-    {c2py::python_typename<
-       const nda::basic_array<std::complex<double>, 2, nda::C_layout, 'M', nda::heap_basic<nda::mem::mallocator<nda::mem::AddressSpace::Host>>> &>()},
-    {c2py::python_typename<const std::optional<
-       nda::basic_array<std::complex<double>, 2, nda::C_layout, 'M', nda::heap_basic<nda::mem::mallocator<nda::mem::AddressSpace::Host>>>> &>()}});
+                   {{c2py::python_typename<const triqs::modest::embedding &>()},
+                    {c2py::python_typename<long>()},
+                    {c2py::python_typename<const nda::basic_array<std::complex<double>, 4, nda::C_layout, 'A',
+                                                                  nda::heap_basic<nda::mem::mallocator<nda::mem::AddressSpace::Host>>> &>()}},
+                   {c2py::python_typename<triqs::operators::many_body_operator>()});
 //--------------------- module function table  -----------------------------
 
 static PyMethodDef module_methods[] = {

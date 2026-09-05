@@ -176,10 +176,9 @@ namespace triqs {
 
     auto const &s2d = s2d_all(atom);
     if (s2d.empty())
-      throw std::runtime_error(
-         fmt::format("[slater_tensor] atom {} (l = {}) has no spherical-to-DFT rotation: its DFT code does not define one for "
-                     "this shell. Build the tensor with U_matrix_slater_spherical and rotate_U_matrix_slater instead.",
-                     atom, shell.l));
+      throw std::runtime_error(fmt::format("[slater_tensor] atom {} (l = {}) has no spherical-to-DFT rotation: its DFT code does not define one for "
+                                           "this shell. Build the tensor with U_matrix_slater_spherical and rotate_U_matrix_slater instead.",
+                                           atom, shell.l));
     if (s2d.extent(0) != n_shell or s2d.extent(1) != n_shell)
       throw std::runtime_error(fmt::format("[slater_tensor] atom {} has l = {} (shell of {} orbitals) but its spherical-to-DFT rotation is {}x{}.",
                                            atom, shell.l, n_shell, s2d.extent(0), s2d.extent(1)));
@@ -318,11 +317,22 @@ namespace triqs {
   }
 
   // ----------------------------------------------------
-  operators::many_body_operator make_kanamori(std::vector<std::string> const &tau_names, std::vector<long> const &dim_gamma, double U_int,
-                                              double U_prime, double J_hund, bool spin_flip, bool pair_hopping) {
+  // The block decomposition of impurity `imp_idx`, checking the index is in range.
+  namespace detail {
+    std::vector<long> imp_decomposition_at(modest::embedding const &E, long imp_idx, std::string_view who) {
+      if (imp_idx < 0 or imp_idx >= E.n_impurities())
+        throw std::runtime_error(
+           fmt::format("[{}] impurity index {} is out of range: the embedding has {} impurities.", who, imp_idx, E.n_impurities()));
+      return E.imp_decomposition(imp_idx);
+    }
+  } // namespace detail
 
-    // compute number of orbitals
-    long n_orb = stdr::fold_left(dim_gamma, 0, std::plus<>());
+  operators::many_body_operator make_kanamori(modest::embedding const &E, long imp_idx, double U_int, double U_prime, double J_hund, bool spin_flip,
+                                              bool pair_hopping) {
+
+    auto dim_gamma = detail::imp_decomposition_at(E, imp_idx, "make_kanamori");
+    auto tau_names = E.sigma_names();
+    long n_orb     = stdr::fold_left(dim_gamma, 0, std::plus<>());
 
     // construct operator mapping
     auto op_map = make_op_map(tau_names, dim_gamma);
@@ -337,28 +347,52 @@ namespace triqs {
     return rename_op(h_int_kanamori(Umat, Upmat, J_hund, n_orb, tau_names, params), op_map);
   }
 
-  operators::many_body_operator make_density_density(const std::vector<std::string> &tau_names, const std::vector<long> &dim_gamma, double U_int,
-                                                     double U_prime, double J_hund) {
+  operators::many_body_operator make_density_density(modest::embedding const &E, long imp_idx, double U_int, double U_prime, double J_hund) {
     // make kanamori without spin-flip and pair-hopping
-    return make_kanamori(tau_names, dim_gamma, U_int, U_prime, J_hund, false, false);
+    return make_kanamori(E, imp_idx, U_int, U_prime, J_hund, false, false);
   }
 
-  operators::many_body_operator make_slater(std::vector<std::string> const &tau_names, std::vector<long> const &dim_gamma, double U_int,
-                                            double J_hund, nda::matrix<dcomplex> const &spherical_to_dft,
-                                            std::optional<nda::matrix<dcomplex>> const &dft_to_local) {
+  operators::many_body_operator make_slater(modest::embedding const &E, long imp_idx, nda::array<dcomplex, 4> const &U_tensor) {
 
-    // compute number of orbitals
-    long n_orb = stdr::fold_left(dim_gamma, 0, std::plus<>());
+    auto dim_gamma = detail::imp_decomposition_at(E, imp_idx, "make_slater");
+    auto tau_names = E.sigma_names();
+    long n_orb     = stdr::fold_left(dim_gamma, 0, std::plus<>());
+
+    auto dim_C = nda::sum(E.embed_block_structure().dims(r_all, 0));
+
+    for (int ax = 1; ax < 4; ++ax)
+      if (U_tensor.extent(ax) != U_tensor.extent(0))
+        throw std::runtime_error(
+           fmt::format("[make_slater] The Coulomb tensor must have the same extent on all four axes, but axis 0 has extent {} "
+                       "and axis {} has extent {}.",
+                       U_tensor.extent(0), ax, U_tensor.extent(ax)));
+
+    // The tensor may be sized for the impurity itself, or for the whole correlated space -- in which case this
+    // impurity's block is cut out through the embedding. The second form is what to_local_basis returns when the
+    // impurity is a part of C split off with split_imp. The Coulomb tensor carries no sigma index.
+    auto U_imp = [&]() -> nda::array<dcomplex, 4> {
+      if (U_tensor.extent(0) == n_orb) return U_tensor;
+      if (U_tensor.extent(0) != dim_C)
+        throw std::runtime_error(
+           fmt::format("[make_slater] The Coulomb tensor has extent {}, but impurity {} has {} orbitals and the correlated "
+                       "space has {}. Pass a tensor sized for either.",
+                       U_tensor.extent(0), imp_idx, n_orb, dim_C));
+      // Cutting the block out only works if the impurity's orbitals are contiguous in C. When they are not, the
+      // extraction quietly yields a split or short block, so check what actually came back.
+      auto blocks = E.merge_embed_block_by_imp().slice_sigma().extract<4>({U_tensor});
+      if (blocks[imp_idx].size() != 1 or blocks[imp_idx][0].extent(0) != n_orb)
+        throw std::runtime_error(
+           fmt::format("[make_slater] impurity {} has {} orbitals but is not one contiguous block of the {}-orbital correlated "
+                       "space, so its Coulomb tensor cannot be cut out of a C-sized one. Restrict the tensor to the impurity's "
+                       "orbitals yourself and pass the {}^4 tensor instead.",
+                       imp_idx, n_orb, dim_C, n_orb));
+      return blocks[imp_idx][0];
+    }();
 
     // construct operator mapping
     auto op_map = make_op_map(tau_names, dim_gamma);
 
-    // construct U matrix and rotate to local basis
-    long l         = (n_orb - 1) / 2;
-    auto transform = (dft_to_local) ? spherical_to_dft * dft_to_local.value() : spherical_to_dft;
-    auto U_matrix  = U_matrix_slater_local(l, transform, U_int, J_hund);
-
     // construct h_int and rename operators
-    return rename_op(h_int_slater(U_matrix, n_orb, tau_names), op_map);
+    return rename_op(h_int_slater(U_imp, n_orb, tau_names), op_map);
   }
 } // namespace triqs
